@@ -57,7 +57,7 @@ class StorageTest {
             val eventStream = storage.eventStream as FileEventStream
             val propertiesFile = (storage.propertiesFile as PropertiesFile).file
 
-            val dir = "/tmp/analytics-kotlin/${analytics.configuration.writeKey}"
+            val dir = "/tmp/events-sdk-kotlin/${analytics.configuration.writeKey}"
             // we don't cache storage directory, but we can use the parent of the event storage to verify
             assertEquals(dir, eventStream.directory.parent)
             assertTrue(eventStream.directory.path.contains(dir))

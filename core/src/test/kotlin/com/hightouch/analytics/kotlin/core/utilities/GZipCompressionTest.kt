@@ -31,7 +31,7 @@ class GZipCompressionTest {
                 },
                 "context": {
                     "library": {
-                        "name": "analytics-kotlin",
+                        "name": "events-sdk-kotlin",
                         "version": "1.21.0"
                     },
                     "device": {
@@ -44,7 +44,7 @@ class GZipCompressionTest {
         """.trimIndent()
 
         val requestFactory = RequestFactory()
-        val connection = requestFactory.openConnection("https://api.segment.io/v1/b") as OkHttpURLConnection
+        val connection = requestFactory.openConnection("https://us-east-1.hightouch-events.com/v1/b") as OkHttpURLConnection
 
         // Set up the connection for GZIP
         connection.setRequestProperty("Content-Type", "application/json")
@@ -93,7 +93,7 @@ class GZipCompressionTest {
         val originalData = ""
 
         val requestFactory = RequestFactory()
-        val connection = requestFactory.openConnection("https://api.segment.io/v1/b") as OkHttpURLConnection
+        val connection = requestFactory.openConnection("https://us-east-1.hightouch-events.com/v1/b") as OkHttpURLConnection
 
         connection.setRequestProperty("Content-Type", "application/json")
         connection.setRequestProperty("Content-Encoding", "gzip")
@@ -142,7 +142,7 @@ class GZipCompressionTest {
         }
 
         val requestFactory = RequestFactory()
-        val connection = requestFactory.openConnection("https://api.segment.io/v1/b") as OkHttpURLConnection
+        val connection = requestFactory.openConnection("https://us-east-1.hightouch-events.com/v1/b") as OkHttpURLConnection
 
         connection.setRequestProperty("Content-Type", "application/json")
         connection.setRequestProperty("Content-Encoding", "gzip")
@@ -194,7 +194,7 @@ class GZipCompressionTest {
 
         // Compress using OkHttpURLConnection with createPostConnection
         val requestFactory = RequestFactory()
-        val connection = requestFactory.openConnection("https://api.segment.io/v1/b") as OkHttpURLConnection
+        val connection = requestFactory.openConnection("https://us-east-1.hightouch-events.com/v1/b") as OkHttpURLConnection
 
         connection.setRequestProperty("Content-Type", "application/json")
         connection.setRequestProperty("Content-Encoding", "gzip")
@@ -235,7 +235,7 @@ class GZipCompressionTest {
         val testData = """{"test": "data"}"""
 
         val requestFactory = RequestFactory()
-        val connection = requestFactory.openConnection("https://api.segment.io/v1/b") as OkHttpURLConnection
+        val connection = requestFactory.openConnection("https://us-east-1.hightouch-events.com/v1/b") as OkHttpURLConnection
 
         connection.setRequestProperty("Content-Type", "application/json")
         // NO Content-Encoding header set
@@ -275,7 +275,7 @@ class GZipCompressionTest {
         """.trimIndent()
 
         val requestFactory = RequestFactory()
-        val connection = requestFactory.openConnection("https://api.segment.io/v1/b") as OkHttpURLConnection
+        val connection = requestFactory.openConnection("https://us-east-1.hightouch-events.com/v1/b") as OkHttpURLConnection
 
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
         connection.setRequestProperty("Content-Encoding", "gzip")

@@ -44,7 +44,7 @@ class AnalyticsTests {
     private val epochTimestamp = Date(0).toInstant().toString()
     private val baseContext = buildJsonObject {
         val lib = buildJsonObject {
-            put(ContextPlugin.LIBRARY_NAME_KEY, "analytics-kotlin")
+            put(ContextPlugin.LIBRARY_NAME_KEY, "events-sdk-kotlin")
             put(ContextPlugin.LIBRARY_VERSION_KEY, Constants.LIBRARY_VERSION)
         }
         put(ContextPlugin.LIBRARY_KEY, lib)
@@ -114,7 +114,7 @@ class AnalyticsTests {
             )
             val httpConnection: HttpURLConnection = mockk()
             val connection = object : Connection(httpConnection, settingsStream, null) {}
-            every { anyConstructed<HTTPClient>().settings("cdn-settings.segment.com/v1") } returns connection
+            every { anyConstructed<HTTPClient>().settings("us-east-1.hightouch-events.com/v1") } returns connection
 
             val config = Configuration(
                 writeKey = "123",
@@ -1025,7 +1025,7 @@ class AsyncAnalyticsTests {
         )
         val httpConnection: HttpURLConnection = mockk()
         val connection = object : Connection(httpConnection, settingsStream, null) {}
-        every { anyConstructed<HTTPClient>().settings("cdn-settings.segment.com/v1") } answers {
+        every { anyConstructed<HTTPClient>().settings("us-east-1.hightouch-events.com/v1") } answers {
             // suspend http calls until we tracked events
             // this will force events get into startup queue
             httpSemaphore.acquire()

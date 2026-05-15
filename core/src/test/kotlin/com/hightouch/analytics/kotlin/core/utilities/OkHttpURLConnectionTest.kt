@@ -22,7 +22,7 @@ class OkHttpURLConnectionTest {
     private lateinit var mockCall: okhttp3.Call
     private lateinit var mockResponse: Response
     private lateinit var connection: OkHttpURLConnection
-    private val testUrl = URL("https://api.segment.io/v1/b")
+    private val testUrl = URL("https://us-east-1.hightouch-events.com/v1/b")
 
     @BeforeEach
     fun setup() {
@@ -342,7 +342,7 @@ class OkHttpURLConnectionTest {
 
     @Test
     fun `request properties are used in OkHttp request`() {
-        connection.setRequestProperty("User-Agent", "analytics-kotlin/$LIBRARY_VERSION")
+        connection.setRequestProperty("User-Agent", "events-sdk-kotlin/$LIBRARY_VERSION")
         connection.setRequestProperty("Content-Type", "application/json")
         connection.addRequestProperty("Accept", "application/json")
         connection.addRequestProperty("Accept", "text/plain")
@@ -356,7 +356,7 @@ class OkHttpURLConnectionTest {
         connection.connect()
         
         val capturedRequest = requestSlot.captured
-        assertEquals("analytics-kotlin/$LIBRARY_VERSION", capturedRequest.header("User-Agent"))
+        assertEquals("events-sdk-kotlin/$LIBRARY_VERSION", capturedRequest.header("User-Agent"))
         assertEquals("application/json", capturedRequest.header("Content-Type"))
         // OkHttp combines multiple headers with the same name
         assertTrue(capturedRequest.headers("Accept").contains("application/json"))
