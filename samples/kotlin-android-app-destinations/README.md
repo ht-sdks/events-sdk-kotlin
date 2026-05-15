@@ -23,5 +23,5 @@ Plugin to enable users to send data to the device-mode Intercom destination
 - [Mixpanel](https://github.com/segment-integrations/analytics-kotlin-mixpanel)
 Plugin to enable users to send data to the device-mode Mixpanel destination
 
-- [Webhook Plugin](src/main/java/com/segment/analytics/kotlin/destinations/plugins/WebhookPlugin.kt)
+- [Webhook Plugin](src/main/java/com/hightouch/analytics/kotlin/destinations/plugins/WebhookPlugin.kt)
 An after plugin that allows you to send the event from the analytics timeline to a webhook of your choice. Ideal for debugging payloads in an internal network.

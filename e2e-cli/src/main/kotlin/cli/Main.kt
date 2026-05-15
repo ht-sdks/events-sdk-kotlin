@@ -1,12 +1,12 @@
 package cli
 
-import com.segment.analytics.kotlin.core.Analytics
-import com.segment.analytics.kotlin.core.RequestFactory
-import com.segment.analytics.kotlin.core.Settings
-import com.segment.analytics.kotlin.core.emptyJsonObject
-import com.segment.analytics.kotlin.core.retry.BackoffConfig
-import com.segment.analytics.kotlin.core.retry.HttpConfig
-import com.segment.analytics.kotlin.core.retry.RateLimitConfig
+import com.hightouch.analytics.kotlin.core.Analytics
+import com.hightouch.analytics.kotlin.core.RequestFactory
+import com.hightouch.analytics.kotlin.core.Settings
+import com.hightouch.analytics.kotlin.core.emptyJsonObject
+import com.hightouch.analytics.kotlin.core.retry.BackoffConfig
+import com.hightouch.analytics.kotlin.core.retry.HttpConfig
+import com.hightouch.analytics.kotlin.core.retry.RateLimitConfig
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.coroutines.delay
