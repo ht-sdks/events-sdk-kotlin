@@ -41,11 +41,17 @@ fun logError(err: Throwable) {
 }
 
 /**
- * A class for sending telemetry data to Segment.
- * This system is used to gather usage and error data from the SDK for the purpose of improving the SDK.
- * It can be disabled at any time by setting Telemetry.enable to false.
- * Errors are sent with a write key, which can be disabled by setting Telemetry.sendWriteKeyOnError to false.
- * All data is downsampled and no PII is collected.
+ * A class for sending telemetry data to the configured metrics endpoint (`https://{apiHost}/m`).
+ *
+ * Disabled by default in the Hightouch fork: the upstream `analytics-kotlin` defaulted this to
+ * `true` so Segment could gather SDK usage/error data, but those metrics flow to Segment's
+ * infrastructure. Hightouch does not currently operate a metrics endpoint, so leaving it on
+ * by default would either ship Hightouch customers' telemetry to Segment (if the apiHost
+ * default is preserved) or 404 against the Hightouch ingest host (if customers override it).
+ * Customers who want SDK telemetry can opt in via `Telemetry.enable = true`.
+ *
+ * Errors include a write key when enabled, which can be disabled by setting
+ * `Telemetry.sendWriteKeyOnError = false`. All data is downsampled and no PII is collected.
  */
 object Telemetry: Subscriber {
     private const val METRICS_BASE_TAG = "analytics_mobile"
@@ -59,9 +65,9 @@ object Telemetry: Subscriber {
     const val INTEGRATION_ERROR_METRIC = "$METRICS_BASE_TAG.integration.invoke.error"
 
     /**
-     * Enables or disables telemetry.
+     * Enables or disables telemetry. Defaults to false in the Hightouch fork.
      */
-    var enable: Boolean = true
+    var enable: Boolean = false
         set(value) {
             field = value
             if(value) {
