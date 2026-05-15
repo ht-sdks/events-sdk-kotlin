@@ -26,7 +26,7 @@ class AndroidStorage(
     eventStream = FileEventStream(context.getDir(directory ?: "segment-disk-queue", Context.MODE_PRIVATE)),
     store = store,
     writeKey = writeKey,
-    fileIndexKey = if(subject == null) "segment.events.file.index.$writeKey" else "segment.events.file.index.$writeKey.$subject",
+    fileIndexKey = if(subject == null) "hightouch.events.file.index.$writeKey" else "hightouch.events.file.index.$writeKey.$subject",
     ioDispatcher = ioDispatcher
 )
 
@@ -79,7 +79,7 @@ object AndroidStorageProvider : StorageProvider {
         val config = analytics.configuration
 
         val eventDirectory = context.getDir("segment-disk-queue", Context.MODE_PRIVATE)
-        val fileIndexKey = "segment.events.file.index.${config.writeKey}"
+        val fileIndexKey = "hightouch.events.file.index.${config.writeKey}"
         val sharedPreferences: SharedPreferences =
             context.getSharedPreferences("analytics-android-${config.writeKey}", Context.MODE_PRIVATE)
 

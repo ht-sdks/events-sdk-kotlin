@@ -175,19 +175,19 @@ class StorageTests {
             @Test
             fun `write updates sharedPreferences`() = runTest {
                 androidStorage.write(Storage.Constants.AppVersion, "100")
-                assertEquals("100", map["segment.app.version"])
+                assertEquals("100", map["hightouch.app.version"])
             }
 
             @Test
             fun `read fetches from sharedPreferences`() {
-                map["segment.app.version"] = "100"
+                map["hightouch.app.version"] = "100"
                 assertEquals("100", androidStorage.read(Storage.Constants.AppVersion))
             }
 
             @Test
             fun `remove sets value to null`() {
                 androidStorage.remove(Storage.Constants.AppVersion)
-                assertEquals(null, map["segment.app.version"])
+                assertEquals(null, map["hightouch.app.version"])
             }
 
             @Test

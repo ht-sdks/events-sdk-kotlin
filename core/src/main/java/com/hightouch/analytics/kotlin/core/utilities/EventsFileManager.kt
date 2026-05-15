@@ -43,7 +43,7 @@ class EventsFileManager(
         createDirectory(directory)
     }
 
-    private val fileIndexKey = if(subject == null) "segment.events.file.index.$writeKey" else "segment.events.file.index.$writeKey.$subject"
+    private val fileIndexKey = if(subject == null) "hightouch.events.file.index.$writeKey" else "hightouch.events.file.index.$writeKey.$subject"
 
     private var os: FileOutputStream? = null
 

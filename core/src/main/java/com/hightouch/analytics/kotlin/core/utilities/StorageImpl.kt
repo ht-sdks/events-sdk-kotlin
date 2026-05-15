@@ -215,7 +215,7 @@ object ConcreteStorageProvider : StorageProvider {
 
         val directory = File("/tmp/events-sdk-kotlin/${config.writeKey}")
         val eventDirectory = File(directory, "events")
-        val fileIndexKey = "segment.events.file.index.${config.writeKey}"
+        val fileIndexKey = "hightouch.events.file.index.${config.writeKey}"
         val userPrefs = File(directory, "events-sdk-kotlin-${config.writeKey}.properties")
 
         val propertiesFile = PropertiesFile(userPrefs)
@@ -235,7 +235,7 @@ class InMemoryStorageProvider: StorageProvider {
 
         val userPrefs = InMemoryPrefs()
         val eventStream = InMemoryEventStream()
-        val fileIndexKey = "segment.events.file.index.${config.writeKey}"
+        val fileIndexKey = "hightouch.events.file.index.${config.writeKey}"
 
         return StorageImpl(userPrefs, eventStream, analytics.store, config.writeKey, fileIndexKey, analytics.fileIODispatcher)
     }

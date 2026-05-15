@@ -30,16 +30,16 @@ interface Storage {
     }
 
     enum class Constants(val rawVal: String) {
-        UserId("segment.userId"),
-        Traits("segment.traits"),
-        AnonymousId("segment.anonymousId"),
-        Settings("segment.settings"),
-        Events("segment.events"),
-        AppVersion("segment.app.version"),
-        AppBuild("segment.app.build"),
+        UserId("hightouch.userId"),
+        Traits("hightouch.traits"),
+        AnonymousId("hightouch.anonymousId"),
+        Settings("hightouch.settings"),
+        Events("hightouch.events"),
+        AppVersion("hightouch.app.version"),
+        AppBuild("hightouch.app.build"),
         LegacyAppBuild("build"),
-        DeviceId("segment.device.id"),
-        RetryState("segment.retry.state")
+        DeviceId("hightouch.device.id"),
+        RetryState("hightouch.retry.state")
     }
 
     /**

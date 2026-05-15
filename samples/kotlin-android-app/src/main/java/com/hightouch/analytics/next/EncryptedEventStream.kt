@@ -180,7 +180,7 @@ class EncryptedStorageProvider(val key: ByteArray) : StorageProvider {
         val config = analytics.configuration
 
         val eventDirectory = context.getDir("segment-disk-queue", Context.MODE_PRIVATE)
-        val fileIndexKey = "segment.events.file.index.${config.writeKey}"
+        val fileIndexKey = "hightouch.events.file.index.${config.writeKey}"
         val sharedPreferences: SharedPreferences =
             context.getSharedPreferences("analytics-android-${config.writeKey}", Context.MODE_PRIVATE)
 
