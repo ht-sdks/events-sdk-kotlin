@@ -66,7 +66,7 @@ internal class StorageImplTest {
                 val writeKey = "123"
                 val directory = File("/tmp/events-sdk-kotlin/${writeKey}")
                 val eventDirectory = File(directory, "events")
-                val fileIndexKey = "segment.events.file.index.${writeKey}"
+                val fileIndexKey = "hightouch.events.file.index.${writeKey}"
                 val userPrefs = File(directory, "events-sdk-kotlin-${writeKey}.properties")
 
                 val propertiesFile = PropertiesFile(userPrefs)
@@ -178,7 +178,7 @@ internal class StorageImplTest {
                 val writeKey = "123"
                 val directory = File("/tmp/test")
                 val eventDirectory = File(directory, "events")
-                val fileIndexKey = "segment.events.file.index.${writeKey}"
+                val fileIndexKey = "hightouch.events.file.index.${writeKey}"
                 val userPrefs = File(directory, "events-sdk-kotlin-${writeKey}.properties")
 
                 val propertiesFile = PropertiesFile(userPrefs)
