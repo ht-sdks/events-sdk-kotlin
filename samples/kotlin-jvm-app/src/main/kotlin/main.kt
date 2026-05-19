@@ -1,5 +1,5 @@
-import com.segment.analytics.kotlin.core.Analytics
-import com.segment.analytics.kotlin.core.platform.plugins.SegmentDestination
+import com.hightouch.analytics.kotlin.core.Analytics
+import com.hightouch.analytics.kotlin.core.platform.plugins.SegmentDestination
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put

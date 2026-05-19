@@ -6,7 +6,7 @@ android {
     compileSdkVersion 33
 
     defaultConfig {
-        applicationId "com.segment.analytics.javaandroidapp"
+        applicationId "com.hightouch.analytics.javaandroidapp"
         minSdkVersion 16
         targetSdkVersion 33
         versionCode 1

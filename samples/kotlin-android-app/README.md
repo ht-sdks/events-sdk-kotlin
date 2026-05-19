@@ -20,7 +20,7 @@ The sample app is configured to open links with the schema and hostname `https:/
 
 Here is how you can do it via adb
 ```bash
-adb shell am start -W -a android.intent.action.VIEW -d "https://segment-sample.com?utm_source=cli\&utm_click=2" com.segment.analytics.next
+adb shell am start -W -a android.intent.action.VIEW -d "https://segment-sample.com?utm_source=cli\&utm_click=2" com.hightouch.analytics.next
 ```
 
 ## Firebase Cloud Messaging

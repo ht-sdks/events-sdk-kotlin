@@ -7,10 +7,10 @@
 }
 
 # These rules will ensure that our generated serializers dont get obfuscated
--keep,includedescriptorclasses class com.segment.analytics.kotlin.**$$serializer { *; }
--keepclassmembers class com.segment.analytics.kotlin.** {
+-keep,includedescriptorclasses class com.hightouch.analytics.kotlin.**$$serializer { *; }
+-keepclassmembers class com.hightouch.analytics.kotlin.** {
     *** Companion;
 }
--keepclasseswithmembers class com.segment.analytics.kotlin.** {
+-keepclasseswithmembers class com.hightouch.analytics.kotlin.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
