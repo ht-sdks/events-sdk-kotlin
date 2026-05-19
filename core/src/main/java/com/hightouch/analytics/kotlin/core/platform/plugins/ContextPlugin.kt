@@ -32,7 +32,7 @@ class ContextPlugin : Plugin {
     override fun setup(analytics: Analytics) {
         super.setup(analytics)
         library = buildJsonObject {
-            put(LIBRARY_NAME_KEY, "analytics-kotlin")
+            put(LIBRARY_NAME_KEY, "events-sdk-kotlin")
             put(LIBRARY_VERSION_KEY, LIBRARY_VERSION)
         }
     }

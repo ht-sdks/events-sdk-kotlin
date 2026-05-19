@@ -77,7 +77,7 @@ class SettingsTests {
 
     @Test
     fun `cached settings propagates to plugins when network error`() = runTest {
-        every { anyConstructed<HTTPClient>().settings("cdn-settings.segment.com/v1") } throws Exception()
+        every { anyConstructed<HTTPClient>().settings("us-east-1.hightouch-events.com/v1") } throws Exception()
         val mockPlugin = spyk(StubPlugin())
 
         val settings = Settings(
@@ -263,47 +263,47 @@ class SettingsTests {
     fun `fetchSettings returns null when Settings string is invalid`() {
         // Null on invalid JSON
         mockHTTPClient("")
-        var settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        var settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null on invalid JSON
         mockHTTPClient("hello")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null on invalid JSON
         mockHTTPClient("#! /bin/sh")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null on invalid JSON
         mockHTTPClient("<!DOCTYPE html>")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null on invalid JSON
         mockHTTPClient("true")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null on invalid JSON
         mockHTTPClient("[]")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null on invalid JSON
         mockHTTPClient("}{")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null on invalid JSON
         mockHTTPClient("{{{{}}}}")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null on invalid JSON
         mockHTTPClient("{null:\"bar\"}")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
     }
 
@@ -328,22 +328,22 @@ class SettingsTests {
     fun `fetchSettings returns null when Settings string is null for known properties`() {
         // Null if integrations is null
         mockHTTPClient("{\"integrations\":null}")
-        var settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        var settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null if plan is null
         mockHTTPClient("{\"plan\":null}")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null if edgeFunction is null
         mockHTTPClient("{\"edgeFunction\":null}")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null if middlewareSettings is null
         mockHTTPClient("{\"middlewareSettings\":null}")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
     }
 
@@ -352,27 +352,27 @@ class SettingsTests {
 
         // integrations must be a JSON object
         mockHTTPClient("{\"integrations\":{}}")
-        var settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        var settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNotNull(settings)
 
         // Null if integrations is a number
         mockHTTPClient("{\"integrations\":123}")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null if integrations is a string
         mockHTTPClient("{\"integrations\":\"foo\"}")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null if integrations is an array
         mockHTTPClient("{\"integrations\":[\"foo\"]}")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
 
         // Null if integrations is an emoji (UTF-8 string)
         mockHTTPClient("{\"integrations\": 😃}")
-        settings = analytics.fetchSettings("foo", "cdn-settings.segment.com/v1")
+        settings = analytics.fetchSettings("foo", "us-east-1.hightouch-events.com/v1")
         assertNull(settings)
     }
 }

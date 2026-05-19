@@ -31,7 +31,7 @@ internal class JavaAnalyticsTest {
     private val epochTimestamp = Date(0).toInstant().toString()
     private val baseContext = buildJsonObject {
         val lib = buildJsonObject {
-            put(ContextPlugin.LIBRARY_NAME_KEY, "analytics-kotlin")
+            put(ContextPlugin.LIBRARY_NAME_KEY, "events-sdk-kotlin")
             put(ContextPlugin.LIBRARY_VERSION_KEY, Constants.LIBRARY_VERSION)
         }
         put(ContextPlugin.LIBRARY_KEY, lib)

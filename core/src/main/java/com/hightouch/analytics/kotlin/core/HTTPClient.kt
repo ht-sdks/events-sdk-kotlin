@@ -53,7 +53,7 @@ class HTTPClient(
 
         connection.setRequestProperty(
             "User-Agent",
-            "analytics-kotlin/$LIBRARY_VERSION"
+            "events-sdk-kotlin/$LIBRARY_VERSION"
         )
         connection.doInput = true
         return connection
@@ -153,7 +153,8 @@ open class RequestFactory(
         .build()
 
     open fun settings(cdnHost: String, writeKey: String): HttpURLConnection {
-        val connection: HttpURLConnection = openConnection("https://$cdnHost/projects/$writeKey/settings")
+        val scheme = if (isLoopback(cdnHost)) "http" else "https"
+        val connection: HttpURLConnection = openConnection("$scheme://$cdnHost/projects/$writeKey/settings")
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
         val responseCode = connection.responseCode
         if (responseCode != HttpURLConnection.HTTP_OK) {
@@ -164,13 +165,17 @@ open class RequestFactory(
     }
 
     open fun upload(apiHost: String): HttpURLConnection {
-        val connection: HttpURLConnection = openConnection("https://$apiHost/b")
+        val scheme = if (isLoopback(apiHost)) "http" else "https"
+        val connection: HttpURLConnection = openConnection("$scheme://$apiHost/batch")
         connection.setRequestProperty("Content-Type", "text/plain")
         connection.setRequestProperty("Content-Encoding", "gzip")
         connection.doOutput = true
         connection.setChunkedStreamingMode(0)
         return connection
     }
+
+    private fun isLoopback(host: String): Boolean =
+        host.startsWith("localhost") || host.startsWith("10.")
 
     /**
      * Configures defaults for connections opened with [.upload], and [ ][.projectSettings].
@@ -189,7 +194,7 @@ open class RequestFactory(
 
         connection.setRequestProperty(
             "User-Agent",
-            "analytics-kotlin/$LIBRARY_VERSION"
+            "events-sdk-kotlin/$LIBRARY_VERSION"
         )
         connection.doInput = true
         return connection

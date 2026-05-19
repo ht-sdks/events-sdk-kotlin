@@ -35,13 +35,17 @@ class HTTPClientTests {
 
     @Test
     fun `upload connection has correct configuration`() {
+        // Pre-existing network integration test: settings() asserts HTTP 200 from the host.
+        // Kept pointing at Segment's CDN (which returns 200 for the public test writeKey)
+        // rather than Hightouch's endpoint (which doesn't recognize this writeKey).
+        // A MockWebServer-based rewrite would be cleaner; out of scope for the rebrand.
         httpClient.settings("cdn-settings.segment.com/v1").connection.let {
             assertEquals(
                 "https://cdn-settings.segment.com/v1/projects/1vNgUqwJeCHmqgI9S1sOm9UHCyfYqbaQ/settings",
                 it.url.toString()
             )
             assertEquals(
-                "analytics-kotlin/$LIBRARY_VERSION",
+                "events-sdk-kotlin/$LIBRARY_VERSION",
                 it.getRequestProperty("User-Agent")
             )
         }
@@ -49,15 +53,15 @@ class HTTPClientTests {
 
     @Test
     fun `settings connection has correct configuration`() {
-        httpClient.upload("api.segment.io/v1").also {
+        httpClient.upload("us-east-1.hightouch-events.com/v1").also {
             assertTrue(it.outputStream is GZIPOutputStream)
         }.connection.let {
             assertEquals(
-                "https://api.segment.io/v1/b",
+                "https://us-east-1.hightouch-events.com/v1/batch",
                 it.url.toString()
             )
             assertEquals(
-                "analytics-kotlin/$LIBRARY_VERSION",
+                "events-sdk-kotlin/$LIBRARY_VERSION",
                 it.getRequestProperty("User-Agent")
             )
             assertEquals("gzip", it.getRequestProperty("Content-Encoding"))
@@ -69,7 +73,7 @@ class HTTPClientTests {
 
     @Test
     fun `safeGetInputStream properly catches exception`() {
-        val connection = spyk(URL("https://api.segment.io/v1/b").openConnection() as HttpURLConnection)
+        val connection = spyk(URL("https://us-east-1.hightouch-events.com/v1/batch").openConnection() as HttpURLConnection)
         every { connection.inputStream } throws IOException()
         val errorStream: InputStream? = safeGetInputStream(connection)
         assertEquals(connection.errorStream, errorStream)
@@ -77,7 +81,7 @@ class HTTPClientTests {
 
     @Test
     fun `createPostConnection close`() {
-        val connection = spyk(httpClient.upload("api.segment.io/v1"))
+        val connection = spyk(httpClient.upload("us-east-1.hightouch-events.com/v1"))
         every { connection.connection.responseCode } returns 300
         every { connection.connection.inputStream } throws IOException()
         every { connection.connection.responseMessage } returns "test"
@@ -128,14 +132,14 @@ class HTTPClientTests {
             }
         })
 
-        httpClient.settings("cdn-settings.segment.com/v1").connection.let {
+        httpClient.settings("us-east-1.hightouch-events.com/v1").connection.let {
             assertEquals(
                 "https://cdn.test.com",
                 it.url.toString()
             )
         }
 
-        httpClient.upload("api.segment.io/v1").also {
+        httpClient.upload("us-east-1.hightouch-events.com/v1").also {
             assertFalse(it.outputStream is GZIPOutputStream)
         }.connection.let {
             assertEquals(
@@ -149,7 +153,7 @@ class HTTPClientTests {
     fun `custom requestFactory can remove gzip`() {
         val httpClient = HTTPClient("123", object : RequestFactory() {
             override fun upload(apiHost: String): HttpURLConnection {
-                val connection: HttpURLConnection = openConnection("https://$apiHost/b")
+                val connection: HttpURLConnection = openConnection("https://$apiHost/batch")
                 connection.setRequestProperty("Content-Type", "text/plain")
                 connection.doOutput = true
                 connection.setChunkedStreamingMode(0)
@@ -157,7 +161,7 @@ class HTTPClientTests {
             }
         })
 
-        assertFalse(httpClient.upload("api.segment.io/v1").outputStream is GZIPOutputStream)
+        assertFalse(httpClient.upload("us-east-1.hightouch-events.com/v1").outputStream is GZIPOutputStream)
     }
 
     @Test
@@ -184,7 +188,7 @@ class HTTPClientTests {
         // Test that our actual Segment endpoints use HTTP/2
         // Note: This is an integration test that makes a real request
         try {
-            val connection = httpClient.settings("cdn-settings.segment.com/v1").connection
+            val connection = httpClient.settings("us-east-1.hightouch-events.com/v1").connection
             assertTrue(connection is OkHttpURLConnection,
                 "Settings connection should be OkHttpURLConnection")
 

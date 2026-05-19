@@ -213,10 +213,10 @@ object ConcreteStorageProvider : StorageProvider {
         val analytics = params[0] as Analytics
         val config = analytics.configuration
 
-        val directory = File("/tmp/analytics-kotlin/${config.writeKey}")
+        val directory = File("/tmp/events-sdk-kotlin/${config.writeKey}")
         val eventDirectory = File(directory, "events")
         val fileIndexKey = "segment.events.file.index.${config.writeKey}"
-        val userPrefs = File(directory, "analytics-kotlin-${config.writeKey}.properties")
+        val userPrefs = File(directory, "events-sdk-kotlin-${config.writeKey}.properties")
 
         val propertiesFile = PropertiesFile(userPrefs)
         val eventStream = FileEventStream(eventDirectory)

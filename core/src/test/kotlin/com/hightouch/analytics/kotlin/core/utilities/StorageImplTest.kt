@@ -64,10 +64,10 @@ internal class StorageImplTest {
         val storageProvider = object : StorageProvider {
             override fun createStorage(vararg params: Any): Storage {
                 val writeKey = "123"
-                val directory = File("/tmp/analytics-kotlin/${writeKey}")
+                val directory = File("/tmp/events-sdk-kotlin/${writeKey}")
                 val eventDirectory = File(directory, "events")
                 val fileIndexKey = "segment.events.file.index.${writeKey}"
-                val userPrefs = File(directory, "analytics-kotlin-${writeKey}.properties")
+                val userPrefs = File(directory, "events-sdk-kotlin-${writeKey}.properties")
 
                 val propertiesFile = PropertiesFile(userPrefs)
                 val eventStream = FileEventStream(eventDirectory)
@@ -179,7 +179,7 @@ internal class StorageImplTest {
                 val directory = File("/tmp/test")
                 val eventDirectory = File(directory, "events")
                 val fileIndexKey = "segment.events.file.index.${writeKey}"
-                val userPrefs = File(directory, "analytics-kotlin-${writeKey}.properties")
+                val userPrefs = File(directory, "events-sdk-kotlin-${writeKey}.properties")
 
                 val propertiesFile = PropertiesFile(userPrefs)
                 val eventStream = FileEventStream(eventDirectory)
