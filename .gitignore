@@ -16,3 +16,4 @@ local.properties
 .idea
 /core/bin
 e2e-cli/build/
+claude/
