@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Permits cleartext (plain HTTP) traffic ONLY to the local development collector.
+  Android blocks cleartext by default from API 28+, but the SDK talks to a local
+  Hightouch event collector over http:// (it treats loopback/10.x hosts as cleartext).
+    - 10.0.2.2  : the Android emulator's alias for the host machine's loopback.
+    - localhost : for tests that run the collector on the device/loopback directly.
+  Every other domain keeps the secure default (cleartext denied), so this does not
+  weaken transport security for real backends.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

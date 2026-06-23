@@ -1,0 +1,10 @@
+{
+  "message": {
+    "token": "REPLACE_WITH_DEVICE_TOKEN",
+    "data": {
+      "title": "Order shipped",
+      "body": "Tap to see your order",
+      "hightouch": "{\"messageId\":\"sample-002\",\"defaultAction\":{\"type\":\"openUrl\",\"data\":\"https://example.com/orders/42\"}}"
+    }
+  }
+}

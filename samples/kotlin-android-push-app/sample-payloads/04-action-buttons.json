@@ -1,0 +1,10 @@
+{
+  "message": {
+    "token": "REPLACE_WITH_DEVICE_TOKEN",
+    "data": {
+      "title": "Friend request",
+      "body": "Alex wants to connect",
+      "hightouch": "{\"messageId\":\"sample-004\",\"actionButtons\":[{\"identifier\":\"accept\",\"title\":\"Accept\",\"openApp\":true,\"action\":{\"type\":\"openUrl\",\"data\":\"https://example.com/friends/alex?accept=1\"}},{\"identifier\":\"dismiss\",\"title\":\"Dismiss\",\"openApp\":false,\"action\":{\"type\":\"dismiss\",\"data\":null}}]}"
+    }
+  }
+}
