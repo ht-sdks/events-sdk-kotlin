@@ -28,4 +28,4 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       - name: Build and test
-        run: ./gradlew :core:test :android:test :core:build :android:build
+        run: ./gradlew :core:test :android:test :android-push:test :core:build :android:build :android-push:build

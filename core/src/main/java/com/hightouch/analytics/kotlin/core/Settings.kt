@@ -92,15 +92,22 @@ suspend fun Analytics.checkSettings() {
         return@withContext fetchSettings(writeKey, cdnHost)
     }
 
+    // Only apply settings when the fetch actually succeeded. On failure (e.g. local dev where
+    // the collector doesn't serve /settings) `fetchSettings` returns null; we must NOT fall back
+    // to the store's seeded default settings and run `update()`, because those defaults carry the
+    // production apiHost (State.defaultState -> DEFAULT_API_HOST) and `SegmentDestination.update()`
+    // would clobber a deliberately-configured apiHost (e.g. a local collector), sending uploads to
+    // production and failing with 401. This mirrors analytics-swift, which only calls update() in
+    // the success branch of its settings fetch.
     settingsObj?.let {
         log("Dispatching update settings on ${Thread.currentThread().name}")
         store.dispatch(System.UpdateSettingsAction(settingsObj), System::class)
-    }
 
-    store.currentState(System::class)?.let { system ->
-        system.settings?.let { settings ->
-            log("Propagating settings on ${Thread.currentThread().name}")
-            update(settings)
+        store.currentState(System::class)?.let { system ->
+            system.settings?.let { settings ->
+                log("Propagating settings on ${Thread.currentThread().name}")
+                update(settings)
+            }
         }
     }
 

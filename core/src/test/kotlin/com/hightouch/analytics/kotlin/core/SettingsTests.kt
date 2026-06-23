@@ -1,7 +1,9 @@
 package com.hightouch.analytics.kotlin.core
 
 import com.hightouch.analytics.kotlin.core.platform.DestinationPlugin
+import com.hightouch.analytics.kotlin.core.platform.EventPipeline
 import com.hightouch.analytics.kotlin.core.platform.Plugin
+import com.hightouch.analytics.kotlin.core.platform.plugins.SegmentDestination
 import com.hightouch.analytics.kotlin.core.utils.StubPlugin
 import com.hightouch.analytics.kotlin.core.utils.mockHTTPClient
 import com.hightouch.analytics.kotlin.core.utils.testAnalytics
@@ -100,6 +102,31 @@ class SettingsTests {
         verify {
             mockPlugin.update(settings, Plugin.UpdateType.Initial)
         }
+    }
+
+    @Test
+    fun `failed settings fetch does not clobber a configured apiHost`() = runTest {
+        // Regression: when the settings fetch fails, the SDK must NOT fall back to the
+        // store's seeded default settings (which carry DEFAULT_API_HOST) and run update(),
+        // because that would overwrite a deliberately-configured apiHost — sending uploads
+        // to production. Mirrors analytics-swift (update() only on a successful fetch).
+        every { anyConstructed<HTTPClient>().settings(any()) } throws Exception()
+
+        val configured = "10.0.2.2:7777/v1"
+        val a = testAnalytics(
+            Configuration(writeKey = "123", application = "Test", apiHost = configured),
+            testScope,
+            testDispatcher,
+        )
+
+        val destination = a.find(SegmentDestination::class)
+        assertNotNull(destination)
+        val pipelineField = SegmentDestination::class.java.getDeclaredField("pipeline")
+            .apply { isAccessible = true }
+        val pipeline = pipelineField.get(destination) as EventPipeline
+
+        // Without the fix this would have been clobbered to Constants.DEFAULT_API_HOST.
+        assertEquals(configured, pipeline.apiHost)
     }
 
     // Disabled because now we always propagate settings regardless network status

@@ -65,7 +65,7 @@ class HTTPClientTests {
                 it.getRequestProperty("User-Agent")
             )
             assertEquals("gzip", it.getRequestProperty("Content-Encoding"))
-            assertEquals("text/plain", it.getRequestProperty("Content-Type"))
+            assertEquals("application/json", it.getRequestProperty("Content-Type"))
             // ideally we would also test if auth Header is set, but due to security concerns this
             // is not possible https://bit.ly/3CVpR3J
         }

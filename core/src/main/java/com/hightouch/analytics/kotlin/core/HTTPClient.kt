@@ -167,7 +167,7 @@ open class RequestFactory(
     open fun upload(apiHost: String): HttpURLConnection {
         val scheme = if (isLoopback(apiHost)) "http" else "https"
         val connection: HttpURLConnection = openConnection("$scheme://$apiHost/batch")
-        connection.setRequestProperty("Content-Type", "text/plain")
+        connection.setRequestProperty("Content-Type", "application/json")
         connection.setRequestProperty("Content-Encoding", "gzip")
         connection.doOutput = true
         connection.setChunkedStreamingMode(0)
