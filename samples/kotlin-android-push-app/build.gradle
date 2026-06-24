@@ -1,0 +1,85 @@
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'com.google.gms.google-services'
+}
+
+// Read optional overrides from local.properties (gitignored). Each developer can set their own
+// write key / api host / app id without committing secrets.
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) {
+    localPropsFile.withInputStream { localProps.load(it) }
+}
+def localWriteKey = localProps.getProperty('hightouch.writeKey', '')
+def localAppId = localProps.getProperty('hightouch.appId', '')
+def localApiHost = localProps.getProperty('hightouch.apiHost', '')
+
+android {
+    compileSdkVersion 33
+
+    defaultConfig {
+        applicationId "com.hightouch.analytics.kotlin.push.sample"
+        minSdkVersion 21
+        targetSdkVersion 33
+        versionCode 1
+        versionName "0.1.0"
+
+        buildConfigField("String", "HIGHTOUCH_WRITE_KEY", "\"${localWriteKey}\"")
+        buildConfigField("String", "HIGHTOUCH_APP_ID", "\"${localAppId}\"")
+        buildConfigField("String", "HIGHTOUCH_API_HOST", "\"${localApiHost}\"")
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+    buildFeatures {
+        compose true
+    }
+    composeOptions {
+        // Kotlin 1.8.0 -> Compose Compiler 1.4.0
+        kotlinCompilerExtensionVersion '1.4.0'
+    }
+    packagingOptions {
+        resources {
+            excludes += [
+                'META-INF/AL2.0',
+                'META-INF/LGPL2.1',
+                'META-INF/DEPENDENCIES',
+            ]
+        }
+    }
+}
+
+dependencies {
+    implementation project(':android-push')
+
+    implementation 'androidx.core:core-ktx:1.10.1'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.activity:activity-compose:1.6.1'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.1'
+
+    // Compose
+    implementation platform('androidx.compose:compose-bom:2023.01.00')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material:material'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+
+    // Firebase — pulled in transitively by :android-push, declared explicitly for clarity.
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+    implementation 'com.google.firebase:firebase-messaging'
+}

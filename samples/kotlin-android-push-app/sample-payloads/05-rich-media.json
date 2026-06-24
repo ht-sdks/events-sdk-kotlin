@@ -1,0 +1,10 @@
+{
+  "message": {
+    "token": "REPLACE_WITH_DEVICE_TOKEN",
+    "data": {
+      "title": "New look",
+      "body": "Check out the latest drop",
+      "hightouch": "{\"messageId\":\"sample-005\",\"attachmentUrl\":\"https://picsum.photos/720/480\",\"defaultAction\":{\"type\":\"openUrl\",\"data\":\"https://example.com/lookbook\"}}"
+    }
+  }
+}

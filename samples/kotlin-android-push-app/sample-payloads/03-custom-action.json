@@ -1,0 +1,10 @@
+{
+  "message": {
+    "token": "REPLACE_WITH_DEVICE_TOKEN",
+    "data": {
+      "title": "Coins doubled",
+      "body": "Tap to claim",
+      "hightouch": "{\"messageId\":\"sample-003\",\"defaultAction\":{\"type\":\"playSound\",\"data\":\"trumpet\"}}"
+    }
+  }
+}

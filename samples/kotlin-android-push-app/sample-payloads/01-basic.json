@@ -1,0 +1,10 @@
+{
+  "message": {
+    "token": "REPLACE_WITH_DEVICE_TOKEN",
+    "data": {
+      "title": "Hello",
+      "body": "Basic notification — no actions",
+      "hightouch": "{\"messageId\":\"sample-001\"}"
+    }
+  }
+}

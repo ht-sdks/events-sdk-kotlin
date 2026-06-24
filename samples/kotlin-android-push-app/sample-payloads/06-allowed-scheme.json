@@ -1,0 +1,10 @@
+{
+  "message": {
+    "token": "REPLACE_WITH_DEVICE_TOKEN",
+    "data": {
+      "title": "Open in app",
+      "body": "Uses a custom scheme from allowedProtocols",
+      "hightouch": "{\"messageId\":\"sample-006\",\"defaultAction\":{\"type\":\"openUrl\",\"data\":\"hightouchsample://orders/42\"}}"
+    }
+  }
+}
