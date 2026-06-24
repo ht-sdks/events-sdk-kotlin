@@ -30,6 +30,14 @@ functional instances.
 
 `https` is always allowed; add custom schemes (e.g. `"myapp"`, `"tel"`) via `setAllowedProtocols`.
 
+## Threading
+
+Both handlers are invoked **synchronously on the main thread** (whether the tap arrives via the
+trampoline activity or a background action button). Keep them fast and non-blocking — start an
+activity, post to your own queue, or hand off to a coroutine/executor, but don't do network or disk
+I/O inline, or you risk an ANR. Engagement-event tracking is already dispatched off-thread by the
+SDK, so you don't need to background that yourself.
+
 ## Open-app behavior
 
 Tapping a notification body — or a foreground (open-app) action button — should bring the user into

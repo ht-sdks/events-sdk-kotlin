@@ -3,6 +3,8 @@ package com.hightouch.analytics.kotlin.push.notification
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -42,18 +44,26 @@ internal object RichMediaLoader {
                 Log.w(TAG, "Rich media fetch failed: HTTP $code for $url")
                 return null
             }
-            // contentLength is -1 when the server doesn't report a size (chunked transfer
-            // encoding, gzip), which is common for CDNs — attempt the download anyway rather
-            // than rejecting valid images. Note this means MAX_BYTES is only a best-effort
-            // guard based on the advisory Content-Length header; it is not enforced while
-            // reading the stream.
+            // Reject early when the advisory Content-Length already exceeds the cap. It's -1/0
+            // when the server doesn't report a size (chunked transfer encoding, gzip), which is
+            // common for CDNs — download those anyway, but readCapped enforces MAX_BYTES while
+            // reading so an unbounded or oversized response can't exhaust memory.
             val contentLength = connection.contentLength
-            if (contentLength in 1..MAX_BYTES || contentLength <= 0) {
-                connection.inputStream.use { stream ->
-                    BitmapFactory.decodeStream(stream)
-                }
-            } else {
+            if (contentLength > MAX_BYTES) {
                 Log.w(TAG, "Rich media payload too large ($contentLength bytes): $url")
+                return null
+            }
+            val bytes = connection.inputStream.use { readCapped(it, MAX_BYTES) }
+            if (bytes == null) {
+                Log.w(TAG, "Rich media payload exceeded $MAX_BYTES bytes: $url")
+                return null
+            }
+            try {
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (e: OutOfMemoryError) {
+                // decodeByteArray allocates the full decoded bitmap, which can dwarf the
+                // compressed bytes; keep the fetch best-effort instead of crashing the worker.
+                Log.w(TAG, "Rich media decode ran out of memory for $url")
                 null
             }
         } catch (e: Exception) {
@@ -62,5 +72,20 @@ internal object RichMediaLoader {
         } finally {
             connection?.disconnect()
         }
+    }
+
+    /** Reads the stream into memory, returning null as soon as it would exceed [max] bytes. */
+    private fun readCapped(input: InputStream, max: Int): ByteArray? {
+        val buffer = ByteArrayOutputStream()
+        val chunk = ByteArray(16 * 1024)
+        var total = 0
+        while (true) {
+            val read = input.read(chunk)
+            if (read == -1) break
+            total += read
+            if (total > max) return null
+            buffer.write(chunk, 0, read)
+        }
+        return buffer.toByteArray()
     }
 }

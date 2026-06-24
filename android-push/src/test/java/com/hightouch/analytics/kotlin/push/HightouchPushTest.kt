@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -164,11 +165,8 @@ class HightouchPushTest {
 
     @Test
     fun `register before initialize throws`() {
-        try {
+        assertThrows(IllegalStateException::class.java) {
             HightouchPush.register("token")
-            error("expected IllegalStateException")
-        } catch (e: IllegalStateException) {
-            // expected
         }
     }
 

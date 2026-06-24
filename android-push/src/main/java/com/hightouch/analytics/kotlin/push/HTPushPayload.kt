@@ -60,7 +60,7 @@ internal data class HTPushPayload(
             val messageId = root[Keys.MESSAGE_ID]?.jsonPrimitive?.contentOrNull
                 ?: return null
 
-            val buttons = (root[Keys.ACTION_BUTTONS] as? JsonElement)
+            val buttons = root[Keys.ACTION_BUTTONS]
                 ?.let { runCatching { it.jsonArray }.getOrNull() }
                 ?.mapNotNull { element ->
                     runCatching { element.jsonObject }.getOrNull()?.let(HTActionButton::parse)
