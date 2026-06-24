@@ -1,8 +1,5 @@
 package com.hightouch.analytics.kotlin.push.sample.ui
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
+import androidx.core.app.NotificationManagerCompat
 import com.hightouch.analytics.kotlin.push.HightouchPush
 import kotlinx.coroutines.delay
 
@@ -39,7 +36,7 @@ fun HomeScreen(onLogout: () -> Unit) {
                 userId = HightouchPush.userId,
                 anonymousId = runCatching { HightouchPush.anonymousId }.getOrNull(),
                 fcmToken = HightouchPush.fcmToken,
-                notificationsEnabled = notificationPermissionGranted(context),
+                notificationsEnabled = areNotificationsEnabled(context),
             )
             delay(1_000)
         }
@@ -86,13 +83,10 @@ private fun Field(label: String, value: String, mono: Boolean = false) {
     }
 }
 
-private fun notificationPermissionGranted(context: android.content.Context): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
-    } else {
-        true // permission did not exist before Android 13
-    }
+// areNotificationsEnabled() reflects the real app-level toggle on every API level — and on
+// Android 13+ it also tracks the POST_NOTIFICATIONS grant — so no version branch is needed.
+private fun areNotificationsEnabled(context: android.content.Context): Boolean {
+    return NotificationManagerCompat.from(context).areNotificationsEnabled()
 }
 
 private data class SnapshotState(

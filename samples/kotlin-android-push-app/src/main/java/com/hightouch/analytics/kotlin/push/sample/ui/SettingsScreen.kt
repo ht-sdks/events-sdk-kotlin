@@ -26,6 +26,7 @@ import com.hightouch.analytics.kotlin.push.sample.AppPreferences
 @Composable
 fun SettingsScreen(
     prefs: AppPreferences,
+    canClose: Boolean,
     onSaved: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -37,8 +38,10 @@ fun SettingsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
-                navigationIcon = {
-                    TextButton(onClick = onClose) { Text("Close") }
+                navigationIcon = if (canClose) {
+                    { TextButton(onClick = onClose) { Text("Close") } }
+                } else {
+                    null
                 },
             )
         },

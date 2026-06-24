@@ -78,5 +78,6 @@ curl -X POST \
   }'
 ```
 
-PR 9 will ship a `sample-payloads/` directory with curl-ready examples for every payload
-shape (basic, deep-link, custom-action, action-buttons, rich-media).
+The `sample-payloads/` directory next to this file has curl-ready examples for every payload
+shape — basic, deep-link, custom-action, action-buttons, rich-media, and allowed-scheme. See
+`sample-payloads/README.md` for what each one exercises and how to send it.

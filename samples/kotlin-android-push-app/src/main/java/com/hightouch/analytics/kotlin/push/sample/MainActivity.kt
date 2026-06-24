@@ -72,12 +72,13 @@ private fun AppRoot() {
     when (screen) {
         Screen.Settings -> SettingsScreen(
             prefs = app.prefs,
+            canClose = app.sdkConfigured,
             onSaved = {
                 if (app.reinitialize()) {
                     screen = if (HightouchPush.userId != null) Screen.Home else Screen.Login
                 }
             },
-            onClose = { if (app.sdkConfigured) screen = Screen.Login },
+            onClose = { screen = Screen.Login },
         )
         Screen.Login -> LoginScreen(
             onLogin = { userId ->

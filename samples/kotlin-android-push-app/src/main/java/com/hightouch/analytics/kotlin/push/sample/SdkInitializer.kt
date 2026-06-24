@@ -55,7 +55,7 @@ internal object SdkInitializer {
                 config = config,
             )
         }
-        Log.i(TAG, "SDK initialized writeKey=${writeKey.take(6)}* appId=$appId")
+        Log.i(TAG, "SDK initialized (apiHostOverride=${apiHost != null})")
         return true
     }
 

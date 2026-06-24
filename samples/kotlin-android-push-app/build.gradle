@@ -10,7 +10,7 @@ plugins {
 def localProps = new Properties()
 def localPropsFile = rootProject.file('local.properties')
 if (localPropsFile.exists()) {
-    localProps.load(localPropsFile.newDataInputStream())
+    localPropsFile.withInputStream { localProps.load(it) }
 }
 def localWriteKey = localProps.getProperty('hightouch.writeKey', '')
 def localAppId = localProps.getProperty('hightouch.appId', '')
