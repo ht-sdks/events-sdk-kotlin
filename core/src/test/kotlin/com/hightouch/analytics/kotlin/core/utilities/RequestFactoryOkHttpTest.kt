@@ -73,7 +73,7 @@ class RequestFactoryOkHttpTest {
         assertEquals("https://us-east-1.hightouch-events.com/v1/batch", connection.url.toString())
         
         // Verify headers are set correctly
-        assertEquals("text/plain", connection.getRequestProperty("Content-Type"))
+        assertEquals("application/json", connection.getRequestProperty("Content-Type"))
         assertEquals("gzip", connection.getRequestProperty("Content-Encoding"))
         assertEquals("events-sdk-kotlin/$LIBRARY_VERSION", connection.getRequestProperty("User-Agent"))
         

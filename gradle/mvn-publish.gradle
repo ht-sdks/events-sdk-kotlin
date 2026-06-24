@@ -10,7 +10,7 @@ publishing {
             artifactId POM_ARTIFACT_ID
             version getVersionName()
 
-            if (project.getName() == "android") {
+            if (project.plugins.hasPlugin('com.android.library')) {
                 artifact("$buildDir/outputs/aar/${project.getName()}-release.aar")
             }
             else {

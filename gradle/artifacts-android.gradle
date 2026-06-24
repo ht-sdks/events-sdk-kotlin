@@ -4,12 +4,29 @@ task sourcesJar(type: Jar) {
 }
 
 task javadoc(type: Javadoc) {
-    configurations.implementation.setCanBeResolved(true)
-
     failOnError false
     source = android.sourceSets.main.java.sourceFiles
     classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
-    classpath += configurations.implementation
+    // The `implementation` configuration is not resolvable. Forcing it (the
+    // previous behavior) bypassed Gradle's variant-aware resolution, which
+    // breaks for Android-library project dependencies (e.g. `:android-push`
+    // depending on `:android`): the plain Javadoc task can't disambiguate
+    // between `debugRuntimeElements` and `releaseRuntimeElements`.
+    //
+    // `releaseCompileClasspath` is AGP's resolvable view of the release
+    // variant. We further request `artifactType=jar` via `artifactView` so
+    // AGP picks the `android-classes-jar` sub-variant — without that hint
+    // it can't choose between aidl / classes-jar / lint / etc.
+    afterEvaluate {
+        def releaseCp = configurations.findByName("releaseCompileClasspath")
+        if (releaseCp != null) {
+            classpath += releaseCp.incoming.artifactView {
+                attributes {
+                    attribute(Attribute.of("artifactType", String), "jar")
+                }
+            }.files
+        }
+    }
 }
 
 // build a jar with javadoc

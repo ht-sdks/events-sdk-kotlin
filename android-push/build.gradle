@@ -1,0 +1,86 @@
+plugins {
+    id 'com.android.library'
+    id 'kotlin-android'
+    id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'de.mannodermaus.android-junit5'
+}
+
+android {
+    compileSdkVersion 33
+
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 33
+        versionCode VERSION_CODE.toInteger()
+        versionName VERSION_NAME
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+
+        buildConfigField("int", "HIGHTOUCH_PUSH_VERSION_CODE", "${versionCode}")
+        buildConfigField("String", "HIGHTOUCH_PUSH_VERSION_NAME", "\"${versionName}\"")
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+        }
+    }
+}
+
+dependencies {
+    // MAIN DEPS
+    api project(':android')
+    api "org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1"
+    api 'com.google.firebase:firebase-messaging:23.4.1'
+    implementation 'androidx.annotation:annotation:1.7.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1'
+    implementation 'androidx.core:core-ktx:1.10.1'
+    // Rich-media notifications fetch their image on a WorkManager background thread instead of
+    // blocking FCM's onMessageReceived binder thread (which has a ~10-20s execution budget).
+    implementation 'androidx.work:work-runtime-ktx:2.7.1'
+
+    // TESTING
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
+    testImplementation 'io.mockk:mockk:1.12.2'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.1'
+    testImplementation 'androidx.work:work-testing:2.7.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+
+    // Add JUnit5 dependencies.
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.8.2'
+
+    // Add JUnit4 legacy dependencies.
+    testImplementation 'junit:junit:4.13.2'
+    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.8.2'
+
+    // Add Robolectric dependencies.
+    // 4.11.1 is the first version that supports compileSdk 33 (SDK_PICKER on
+    // older versions errors out with IllegalArgumentException in DefaultSdkPicker).
+    testImplementation 'org.robolectric:robolectric:4.11.1'
+    testImplementation 'androidx.test:core:1.5.0'
+}
+
+apply from: rootProject.file('gradle/artifacts-android.gradle')
+apply from: rootProject.file('gradle/mvn-publish.gradle')
+apply from: rootProject.file('gradle/codecov.gradle')
+
+tasks.named("signReleasePublication") {
+    dependsOn("bundleReleaseAar")
+}

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.hightouch.analytics.kotlin.push">
+
+    <application>
+
+        <!--
+          Default FirebaseMessagingService. Registered at priority="-1" so that a host app's own
+          FirebaseMessagingService (if any) wins. Host apps may instead forward to us via
+          HightouchFirebaseMessagingService.handleTokenRefresh / handleMessageReceived.
+        -->
+        <service
+            android:name="com.hightouch.analytics.kotlin.push.fcm.HightouchFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter android:priority="-1">
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!--
+          Invisible trampoline activity. Handles notification body taps and
+          openApp=true action buttons. Runs in its own task so it does not interfere with the
+          host app's back stack.
+        -->
+        <activity
+            android:name="com.hightouch.analytics.kotlin.push.trampoline.HightouchTrampolineActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!--
+          Receiver for openApp=false action buttons. Runs in the background; no UI surface.
+        -->
+        <receiver
+            android:name="com.hightouch.analytics.kotlin.push.trampoline.HightouchPushActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.hightouch.analytics.kotlin.push.ACTION_PUSH_ACTION" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>
