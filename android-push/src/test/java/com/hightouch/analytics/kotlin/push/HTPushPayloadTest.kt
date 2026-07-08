@@ -2,6 +2,7 @@ package com.hightouch.analytics.kotlin.push
 
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -22,6 +23,7 @@ class HTPushPayloadTest {
         assertNull(payload.actionButtons)
         assertNull(payload.messageContext)
         assertNull(payload.customData)
+        assertFalse(payload.isSilent)
         assertNull(payload.notificationChannel)
         assertNull(payload.groupKey)
         assertNull(payload.notificationTag)
@@ -227,6 +229,34 @@ class HTPushPayloadTest {
         )
         assertNotNull(payload)
         assertNull(payload!!.customData)
+    }
+
+    @Test
+    fun `parses isSilent true`() {
+        val data = fcm("""{"messageId":"m","isSilent":true,"customData":{"k":"v"}}""")
+
+        val payload = HTPushPayload.parse(data)
+        assertNotNull(payload); payload!!
+
+        assertTrue(payload.isSilent)
+        assertEquals(mapOf("k" to "v"), payload.customData)
+    }
+
+    @Test
+    fun `parses isSilent false`() {
+        val payload = HTPushPayload.parse(fcm("""{"messageId":"m","isSilent":false}"""))
+
+        assertFalse(payload!!.isSilent)
+    }
+
+    @Test
+    fun `non-boolean isSilent is false and parse does not throw`() {
+        val payload = HTPushPayload.parse(
+            fcm("""{"messageId":"m","isSilent":{"nested":"object"}}""")
+        )
+
+        assertNotNull(payload)
+        assertFalse(payload!!.isSilent)
     }
 
     private fun fcm(hightouchJson: String): Map<String, String> =

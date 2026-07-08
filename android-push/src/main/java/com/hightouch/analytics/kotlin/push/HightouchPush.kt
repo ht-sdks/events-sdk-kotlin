@@ -223,6 +223,10 @@ object HightouchPush {
     /** Internal accessor for [CepEventTracking] to read the configured app id. */
     internal val cepAppId: String @Synchronized get() = _config?.appId.orEmpty()
 
+    /** Internal accessor for silent-push delivery to read the configured listener. */
+    internal val cepSilentPushListener: HightouchSilentPushListener?
+        @Synchronized get() = _config?.silentPushListener
+
     /** Internal accessor for notification rendering to read the configured channel id. */
     internal val cepChannelId: String? @Synchronized get() = _config?.notificationChannelId
 

@@ -98,13 +98,14 @@ internal object HightouchNotificationPresenter {
 
     /**
      * Entry point from [com.hightouch.analytics.kotlin.push.fcm.HightouchFirebaseMessagingService].
-     * Decides where the notification is built: a message with a rich-media image is handed to
+     * A silent push is routed to the host's silent-push listener and never displayed. Otherwise
+     * decides where the notification is built: a message with a rich-media image is handed to
      * [HightouchNotificationWorker] so the HTTP fetch runs off FCM's binder thread; everything else
      * is posted synchronously via [postNotification].
      *
      * @return true if the message was a Hightouch push (claimed) — including when display was
-     *   suppressed (notifications disabled) or deferred to the worker — so the FMS won't fall
-     *   through to another handler.
+     *   suppressed (notifications disabled), deferred to the worker, or delivered silently — so
+     *   the FMS won't fall through to another handler.
      */
     fun handle(
         context: Context,
@@ -112,6 +113,12 @@ internal object HightouchNotificationPresenter {
         imageLoader: (String) -> Bitmap? = RichMediaLoader::load,
     ): Boolean {
         val payload = HTPushPayload.parse(remoteMessage.data) ?: return false
+
+        if (payload.isSilent) {
+            deliverSilentPush(payload)
+            return true
+        }
+
         val data = effectiveData(remoteMessage)
 
         if (payload.attachmentUrl != null) {
@@ -120,6 +127,34 @@ internal object HightouchNotificationPresenter {
             return true
         }
         return postNotification(context, data, imageLoader)
+    }
+
+    /**
+     * Deliver a silent push to the host app's [com.hightouch.analytics.kotlin.push.HightouchSilentPushListener].
+     * Never posts a notification — the message is claimed either way.
+     *
+     * The listener fires only for non-empty `customData` (a silent push without it carries
+     * nothing to deliver), matching the iOS silent-push delegate contract. Runs on FCM's
+     * message-handling thread; a listener exception is caught and logged so host-app bugs
+     * don't crash the FCM service process.
+     */
+    private fun deliverSilentPush(payload: HTPushPayload) {
+        val customData = payload.customData?.takeIf { it.isNotEmpty() } ?: return
+        val listener = HightouchPush.cepSilentPushListener
+        if (listener == null) {
+            Log.w(
+                TAG,
+                "Silent push received but no HightouchSilentPushListener is registered; " +
+                    "dropping customData. Set it via HightouchPushConfig.Builder" +
+                    ".setSilentPushListener(...) and initialize in Application.onCreate.",
+            )
+            return
+        }
+        try {
+            listener.onSilentPush(customData)
+        } catch (e: Exception) {
+            Log.e(TAG, "HightouchSilentPushListener threw while handling a silent push", e)
+        }
     }
 
     /**

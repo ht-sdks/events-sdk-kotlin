@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import com.google.firebase.messaging.RemoteMessage
 import com.hightouch.analytics.kotlin.push.HightouchPush
 import com.hightouch.analytics.kotlin.push.HightouchPushConfig
+import com.hightouch.analytics.kotlin.push.HightouchSilentPushListener
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.core.Analytics
 import com.hightouch.analytics.kotlin.core.Configuration
@@ -415,6 +416,99 @@ class HightouchNotificationPresenterTest {
 
         assertTrue(claimed)
         assertEquals(1, Shadows.shadowOf(nm).allNotifications.size)
+    }
+
+    @Test
+    fun `silent push claims the message, posts nothing, and delivers customData to the listener`() {
+        val received = mutableListOf<Map<String, String>>()
+        reinitializeWithListener { received.add(it) }
+        val msg = mockMessage(
+            data = mapOf(
+                "hightouch" to
+                    """{"messageId":"m-silent","isSilent":true,"customData":{"k1":"v1","k2":"v2"}}""",
+            ),
+        )
+
+        assertTrue(HightouchNotificationPresenter.handle(context, msg))
+
+        assertEquals(0, Shadows.shadowOf(nm).allNotifications.size)
+        assertEquals(listOf(mapOf("k1" to "v1", "k2" to "v2")), received)
+    }
+
+    @Test
+    fun `silent push without customData is claimed but does not invoke the listener`() {
+        val received = mutableListOf<Map<String, String>>()
+        reinitializeWithListener { received.add(it) }
+        val msg = mockMessage(
+            data = mapOf("hightouch" to """{"messageId":"m-silent","isSilent":true}"""),
+        )
+
+        assertTrue(HightouchNotificationPresenter.handle(context, msg))
+
+        assertEquals(0, Shadows.shadowOf(nm).allNotifications.size)
+        assertTrue(received.isEmpty())
+    }
+
+    @Test
+    fun `silent push with no listener registered is claimed and posts nothing`() {
+        val msg = mockMessage(
+            data = mapOf(
+                "hightouch" to
+                    """{"messageId":"m-silent","isSilent":true,"customData":{"k":"v"}}""",
+            ),
+        )
+
+        assertTrue(HightouchNotificationPresenter.handle(context, msg))
+
+        assertEquals(0, Shadows.shadowOf(nm).allNotifications.size)
+    }
+
+    @Test
+    fun `a listener exception is caught and the silent push is still claimed`() {
+        reinitializeWithListener { error("host bug") }
+        val msg = mockMessage(
+            data = mapOf(
+                "hightouch" to
+                    """{"messageId":"m-silent","isSilent":true,"customData":{"k":"v"}}""",
+            ),
+        )
+
+        assertTrue(HightouchNotificationPresenter.handle(context, msg))
+
+        assertEquals(0, Shadows.shadowOf(nm).allNotifications.size)
+    }
+
+    @Test
+    fun `silent push with an attachmentUrl skips the worker and delivers to the listener`() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(context)
+        val received = mutableListOf<Map<String, String>>()
+        reinitializeWithListener { received.add(it) }
+        val msg = mockMessage(
+            data = mapOf(
+                "hightouch" to
+                    """{"messageId":"m-silent","isSilent":true,
+                        "attachmentUrl":"https://cdn.example.com/img.png",
+                        "customData":{"k":"v"}}""",
+            ),
+        )
+
+        assertTrue(HightouchNotificationPresenter.handle(context, msg))
+
+        val work = WorkManager.getInstance(context)
+            .getWorkInfosByTag(HightouchNotificationWorker::class.java.name).get()
+        assertTrue(work.isEmpty())
+        assertEquals(listOf(mapOf("k" to "v")), received)
+    }
+
+    private fun reinitializeWithListener(listener: HightouchSilentPushListener) {
+        HightouchPush.resetForTesting()
+        HightouchPush.initialize(
+            analytics,
+            HightouchPushConfig.Builder("app-1")
+                .setSmallIconResId(android.R.drawable.ic_dialog_info)
+                .setSilentPushListener(listener)
+                .build(),
+        )
     }
 
     private fun mockMessage(data: Map<String, String>): RemoteMessage =
