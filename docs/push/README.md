@@ -2,7 +2,8 @@
 
 `android-push` adds Hightouch push-notification support to the Hightouch Analytics
 Kotlin/Android SDK: FCM token registration, notification rendering (image, action buttons,
-channels), tap handling with deep-link/custom-action callbacks, and engagement tracking.
+channels), tap handling with deep-link/custom-action callbacks, silent (background data)
+pushes, and engagement tracking.
 
 - **Artifact:** `com.hightouch.analytics.kotlin:android-push`
 - **Min SDK:** 21
@@ -47,4 +48,5 @@ renders incoming Hightouch pushes.
 | [Notification channels](notification-channels.md) | The default channel, defining your own, per-message channel selection, importance |
 | [Notification behavior](notification-behavior.md) | Title/body, image, action buttons, sound, delivery priority, replace/tag, grouping |
 | [Handlers & deep links](handlers-and-deep-links.md) | `urlHandler`, `customActionHandler`, allowed schemes, open-app behavior, `customData` |
+| [Silent push](silent-push.md) | Background data pushes: the `silentPushListener`, threading, delivery caveats |
 | [Payload reference](payload-reference.md) | The on-the-wire FCM payload contract |
