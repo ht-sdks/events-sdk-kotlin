@@ -23,7 +23,10 @@ import com.hightouch.analytics.kotlin.push.HightouchPush
 import kotlinx.coroutines.delay
 
 @Composable
-fun HomeScreen(onLogout: () -> Unit) {
+fun HomeScreen(
+    onLogout: () -> Unit,
+    onOpenSilentPushLog: () -> Unit,
+) {
     val context = LocalContext.current
 
     // Poll the SDK every second so the token field reflects any FCM refresh that lands after
@@ -61,6 +64,11 @@ fun HomeScreen(onLogout: () -> Unit) {
                 label = "Notifications enabled",
                 value = state.notificationsEnabled.toString(),
             )
+
+            Button(
+                onClick = onOpenSilentPushLog,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Silent push log") }
 
             Button(
                 onClick = onLogout,

@@ -33,9 +33,16 @@ internal object SdkInitializer {
             return false
         }
 
+        val appContext = context.applicationContext
         val config = HightouchPushConfig.Builder(appId)
             .setUrlHandler(SampleUrlHandler)
             .setCustomActionHandler(SampleCustomActionHandler)
+            // Registered here — SdkInitializer runs from Application.onCreate — so the listener
+            // exists even when FCM cold-starts the process in the background for a silent push.
+            .setSilentPushListener { customData ->
+                Log.i(TAG, "silentPushListener: customData=$customData")
+                SilentPushStore.append(appContext, customData)
+            }
             .setAllowedProtocols(listOf("hightouchsample"))
             // Small icon is declared in AndroidManifest.xml via the meta-data
             // `com.hightouch.push.default_notification_icon`. That's the recommended pattern;
@@ -44,13 +51,13 @@ internal object SdkInitializer {
 
         if (apiHost != null) {
             // Override the apiHost on the underlying Analytics instance.
-            val analytics = Analytics(writeKey, context.applicationContext) {
+            val analytics = Analytics(writeKey, appContext) {
                 this.apiHost = apiHost
             }
             HightouchPush.initialize(analytics, config)
         } else {
             HightouchPush.initialize(
-                context = context.applicationContext,
+                context = appContext,
                 writeKey = writeKey,
                 config = config,
             )
