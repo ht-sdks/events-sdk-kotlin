@@ -52,7 +52,9 @@ object SilentPushStore {
 
     fun clear(context: Context) {
         synchronized(this) {
-            prefs(context).edit().remove(KEY_ENTRIES).commit()
+            // apply(), not commit(): this runs on the main thread (Clear button), and losing a
+            // clear to a process kill is harmless — unlike append(), which must survive one.
+            prefs(context).edit().remove(KEY_ENTRIES).apply()
         }
     }
 
