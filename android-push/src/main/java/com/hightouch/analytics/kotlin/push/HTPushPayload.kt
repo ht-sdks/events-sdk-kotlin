@@ -33,6 +33,13 @@ internal data class HTPushPayload(
     val messageContext: JsonObject?,
     val customData: Map<String, String>?,
     /**
+     * Silent (background data) push. FCM data-only messages have no native silent concept,
+     * so the sender marks them explicitly with `hightouch.isSilent = true`. When set, the SDK
+     * suppresses notification display and delivers [customData] to the host app's
+     * [HightouchSilentPushListener] instead.
+     */
+    val isSilent: Boolean,
+    /**
      * Android-only extension fields. These are always present in the payload; any may be
      * null when the corresponding campaign field was left blank.
      */
@@ -74,6 +81,9 @@ internal data class HTPushPayload(
                 messageContext = root[Keys.MESSAGE_CONTEXT]
                     ?.let { runCatching { it.jsonObject }.getOrNull() },
                 customData = parseCustomData(root[Keys.CUSTOM_DATA]),
+                isSilent = root[Keys.IS_SILENT]
+                    ?.let { runCatching { it.jsonPrimitive.booleanOrNull }.getOrNull() }
+                    ?: false,
                 notificationChannel = root[Keys.NOTIFICATION_CHANNEL]?.jsonPrimitive?.contentOrNull,
                 groupKey = root[Keys.GROUP_KEY]?.jsonPrimitive?.contentOrNull,
                 notificationTag = root[Keys.NOTIFICATION_TAG]?.jsonPrimitive?.contentOrNull,
@@ -116,6 +126,7 @@ internal data class HTPushPayload(
         const val ACTION_BUTTONS = "actionButtons"
         const val MESSAGE_CONTEXT = "messageContext"
         const val CUSTOM_DATA = "customData"
+        const val IS_SILENT = "isSilent"
         const val NOTIFICATION_CHANNEL = "notificationChannel"
         const val GROUP_KEY = "groupKey"
         const val NOTIFICATION_TAG = "notificationTag"

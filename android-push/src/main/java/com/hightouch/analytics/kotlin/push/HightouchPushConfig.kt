@@ -10,6 +10,10 @@ package com.hightouch.analytics.kotlin.push
  *   the SDK falls back to `Intent.ACTION_VIEW` for `https` schemes and schemes listed
  *   in [allowedProtocols].
  * @param customActionHandler handles non-URL action types from notification buttons.
+ * @param silentPushListener receives the `customData` of silent (background data) pushes.
+ *   Must be registered before a silent push arrives — initialize the SDK with it in
+ *   `Application.onCreate`, since FCM can cold-start the app process in the background.
+ *   See [HightouchSilentPushListener].
  * @param allowedProtocols additional URL schemes the SDK is allowed to open via
  *   `Intent.ACTION_VIEW`. The `https` scheme is always allowed. Add others
  *   (e.g. `"myapp"`, `"tel"`, `"sms"`) to opt them in.
@@ -27,6 +31,7 @@ class HightouchPushConfig private constructor(
     val appId: String,
     val urlHandler: HightouchUrlHandler?,
     val customActionHandler: HightouchCustomActionHandler?,
+    val silentPushListener: HightouchSilentPushListener?,
     val allowedProtocols: List<String>,
     val notificationChannelId: String?,
     val smallIconResId: Int?,
@@ -56,6 +61,7 @@ class HightouchPushConfig private constructor(
     class Builder(private val appId: String) {
         private var urlHandler: HightouchUrlHandler? = null
         private var customActionHandler: HightouchCustomActionHandler? = null
+        private var silentPushListener: HightouchSilentPushListener? = null
         private var allowedProtocols: List<String> = emptyList()
         private var notificationChannelId: String? = null
         private var smallIconResId: Int? = null
@@ -66,6 +72,9 @@ class HightouchPushConfig private constructor(
 
         fun setCustomActionHandler(handler: HightouchCustomActionHandler?): Builder =
             apply { customActionHandler = handler }
+
+        fun setSilentPushListener(listener: HightouchSilentPushListener?): Builder =
+            apply { silentPushListener = listener }
 
         fun setAllowedProtocols(protocols: List<String>): Builder =
             apply { allowedProtocols = protocols }
@@ -82,6 +91,7 @@ class HightouchPushConfig private constructor(
             appId = appId,
             urlHandler = urlHandler,
             customActionHandler = customActionHandler,
+            silentPushListener = silentPushListener,
             allowedProtocols = allowedProtocols,
             notificationChannelId = notificationChannelId,
             smallIconResId = smallIconResId,

@@ -22,6 +22,7 @@ import com.hightouch.analytics.kotlin.push.HightouchPush
 import com.hightouch.analytics.kotlin.push.sample.ui.HomeScreen
 import com.hightouch.analytics.kotlin.push.sample.ui.LoginScreen
 import com.hightouch.analytics.kotlin.push.sample.ui.SettingsScreen
+import com.hightouch.analytics.kotlin.push.sample.ui.SilentPushLogScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -37,7 +38,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { Settings, Login, Home }
+private enum class Screen { Settings, Login, Home, SilentPushLog }
 
 @androidx.compose.runtime.Composable
 private fun AppRoot() {
@@ -92,6 +93,10 @@ private fun AppRoot() {
                 HightouchPush.logout()
                 screen = Screen.Login
             },
+            onOpenSilentPushLog = { screen = Screen.SilentPushLog },
+        )
+        Screen.SilentPushLog -> SilentPushLogScreen(
+            onBack = { screen = Screen.Home },
         )
     }
 }
