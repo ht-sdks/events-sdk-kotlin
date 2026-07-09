@@ -34,6 +34,7 @@ The JSON-decoded value of `data.hightouch`:
 | `defaultAction` | object? | Body-tap action: `{ "type": "openUrl", "data": "<url>" }`. |
 | `actionButtons` | array? | Up to 3 action buttons; see [Action button shape](#action-button-shape). |
 | `customData` | object? | Marketer-defined string key/value pairs surfaced to your app. |
+| `isSilent` | boolean? | Silent (background data) push. When `true` the SDK suppresses display and delivers `customData` to the [silent-push listener](silent-push.md). Silent payloads carry only `messageId`, `messageContext`, and `customData`; `data.title`/`data.body` are omitted. |
 | `messageContext` | object? | Opaque context round-tripped into engagement events. |
 | `notificationChannel` | string? | Per-message channel id (Android). See [channels](notification-channels.md). |
 | `groupKey` | string? | `NotificationCompat.setGroup` value. |

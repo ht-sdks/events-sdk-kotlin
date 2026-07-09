@@ -9,6 +9,7 @@ action. You wire up routing through `HightouchPushConfig`.
 val config = HightouchPushConfig.Builder("APP_ID")
     .setUrlHandler { url, context -> myRouter.navigate(url) }          // return true if handled
     .setCustomActionHandler { action, context -> handle(action) }      // return true if handled
+    .setSilentPushListener { customData -> consume(customData) }       // silent pushes, see silent-push.md
     .setAllowedProtocols(listOf("myapp"))                              // extra schemes to allow
     .setAutoLaunchApp(true)                                            // default true
     .setNotificationChannelId("marketing")                             // optional, see channels doc
