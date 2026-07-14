@@ -4,19 +4,25 @@ The Hightouch Events SDK for Kotlin (Android / JVM).
 
 Forked from [`segmentio/analytics-kotlin`](https://github.com/segmentio/analytics-kotlin) — same Timeline + Plugin architecture, rebranded and rewired to send events to Hightouch.
 
-## Status
-
-Pre-release. Publishing is not yet wired up — see [`claude/plans/events-sdk-kotlin-rebrand.md`](claude/plans/events-sdk-kotlin-rebrand.md) for the rebrand plan.
-
 ## Installation
 
-> **TODO**: Publish target (JitPack / Maven Central) to be decided. Build from source for now.
+Published via [JitPack](https://jitpack.io/#ht-sdks/events-sdk-kotlin/). Add the JitPack
+repository and pick the module you need:
 
-```bash
-git clone git@github.com:hightouchio/events-sdk-kotlin.git
-cd events-sdk-kotlin
-./gradlew :core:build :android:build
+```gradle
+repositories { maven { url 'https://jitpack.io' } }
+
+dependencies {
+    // Android + push notifications:
+    implementation 'com.github.ht-sdks.events-sdk-kotlin:android-push:0.0.1'
+    // …or Android without FCM push:
+    implementation 'com.github.ht-sdks.events-sdk-kotlin:android:0.0.1'
+    // …or pure JVM:
+    implementation 'com.github.ht-sdks.events-sdk-kotlin:core:0.0.1'
+}
 ```
+
+See [`RELEASING.md`](RELEASING.md) for how releases are cut.
 
 ## Initialization
 

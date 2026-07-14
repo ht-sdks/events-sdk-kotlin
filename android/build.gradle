@@ -19,9 +19,6 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
-
-        buildConfigField("int", "SEGMENT_VERSION_CODE", "${versionCode}")
-        buildConfigField("String", "SEGMENT_VERSION_NAME", "\"${versionName}\"")
     }
 
     buildTypes {
@@ -79,7 +76,3 @@ dependencies {
 apply from: rootProject.file('gradle/artifacts-android.gradle')
 apply from: rootProject.file('gradle/mvn-publish.gradle')
 apply from: rootProject.file('gradle/codecov.gradle')
-
-tasks.named("signReleasePublication") {
-    dependsOn("bundleReleaseAar")
-}

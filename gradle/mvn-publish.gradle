@@ -1,5 +1,4 @@
 apply plugin: 'maven-publish'
-apply plugin: 'signing'
 
 publishing {
     publications {
@@ -74,11 +73,8 @@ publishing {
     }
 }
 
-
-signing {
-    sign publishing.publications
+// The publication references the jar/aar by file path, so Gradle can't infer the
+// producing task — declare the dependency explicitly.
+tasks.withType(org.gradle.api.publish.maven.tasks.PublishToMavenLocal).configureEach {
+    dependsOn tasks.matching { it.name == 'jar' || it.name == 'bundleReleaseAar' }
 }
-
-publish.dependsOn build
-publishToMavenLocal.dependsOn build
-publishToSonatype.dependsOn publish
