@@ -55,6 +55,24 @@ apply from: rootProject.file('gradle/artifacts-core.gradle')
 apply from: rootProject.file('gradle/mvn-publish.gradle')
 apply from: rootProject.file('gradle/codecov.gradle')
 
-tasks.named("signReleasePublication") {
-    dependsOn("jar")
+// core has no Android BuildConfig, so LIBRARY_VERSION is hand-maintained in Constants.kt
+// and can drift from VERSION_NAME — guard against that.
+tasks.register("verifyVersionSync") {
+    description = "Checks that Constants.LIBRARY_VERSION matches gradle.properties VERSION_NAME."
+    group = "verification"
+    doLast {
+        def constantsFile = file("src/main/java/com/hightouch/analytics/kotlin/core/Constants.kt")
+        def matcher = constantsFile.text =~ /LIBRARY_VERSION\s*=\s*"([^"]+)"/
+        if (!matcher.find()) {
+            throw new GradleException("Could not find LIBRARY_VERSION in ${constantsFile}")
+        }
+        def libraryVersion = matcher.group(1)
+        if (libraryVersion != VERSION_NAME) {
+            throw new GradleException(
+                    "Version mismatch: Constants.LIBRARY_VERSION ($libraryVersion) != " +
+                    "gradle.properties VERSION_NAME ($VERSION_NAME). Update both to match.")
+        }
+    }
 }
+
+tasks.named("check").configure { dependsOn("verifyVersionSync") }

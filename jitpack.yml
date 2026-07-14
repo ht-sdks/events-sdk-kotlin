@@ -1,0 +1,8 @@
+# JitPack build config — see RELEASING.md.
+# - openjdk11: required by Android Gradle Plugin 7.4.2.
+# - Publish only the library modules, so the build needs no write key / google-services.json.
+# - -Prelease: publish without the -SNAPSHOT suffix.
+jdk:
+  - openjdk11
+install:
+  - ./gradlew -Prelease :core:publishToMavenLocal :android:publishToMavenLocal :android-push:publishToMavenLocal
