@@ -167,27 +167,38 @@ object HightouchPush {
         }
         messaging.token
             .addOnSuccessListener { token ->
-                val prefs = _prefs
-                if (token.isNullOrBlank() || prefs == null) return@addOnSuccessListener
-                val intervalMillis = _config?.tokenUploadIntervalMillis
-                    ?: HightouchPushConfig.DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS
-                // Re-upload on token change (rotation the OS didn't surface via onNewToken) or once
-                // the heartbeat elapses, so an unchanged token still refreshes its liveness signal
-                // instead of being deduped forever.
-                if (shouldUploadToken(
-                        incomingToken = token,
-                        lastUploadedToken = prefs.token,
-                        lastUploadedAtMillis = prefs.lastUploadedAtMillis,
-                        nowMillis = System.currentTimeMillis(),
-                        intervalMillis = intervalMillis,
-                    )
-                ) {
-                    register(token)
-                }
+                if (!token.isNullOrBlank()) registerIfDue(token)
             }
             .addOnFailureListener { e ->
                 Log.w(TAG, "Failed to fetch FCM token on init", e)
             }
+    }
+
+    /**
+     * Atomically decide (via [shouldUploadToken]) and, if due, [register] the token. Re-uploads on
+     * token change (a rotation the OS didn't surface via `onNewToken`) or once the heartbeat
+     * elapses, so an unchanged token refreshes its liveness signal instead of being deduped
+     * forever.
+     *
+     * Synchronized so the check-and-upload is a single critical section. [initialize]'s direct
+     * fetch and the foreground observer can both resolve a token fetch on the same launch; without
+     * atomicity both could observe a stale timestamp and upload, firing a duplicate "registered".
+     */
+    @Synchronized
+    private fun registerIfDue(token: String) {
+        val prefs = _prefs ?: return
+        val intervalMillis = _config?.tokenUploadIntervalMillis
+            ?: HightouchPushConfig.DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS
+        if (shouldUploadToken(
+                incomingToken = token,
+                lastUploadedToken = prefs.token,
+                lastUploadedAtMillis = prefs.lastUploadedAtMillis,
+                nowMillis = System.currentTimeMillis(),
+                intervalMillis = intervalMillis,
+            )
+        ) {
+            register(token)
+        }
     }
 
     /**
