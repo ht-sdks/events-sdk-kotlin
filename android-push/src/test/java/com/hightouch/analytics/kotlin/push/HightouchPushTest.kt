@@ -12,10 +12,13 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -168,6 +171,137 @@ class HightouchPushTest {
         assertThrows(IllegalStateException::class.java) {
             HightouchPush.register("token")
         }
+    }
+
+    @Test
+    fun `register stamps lastUploadedAtMillis`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        val before = System.currentTimeMillis()
+
+        HightouchPush.register("fcm-token-xyz")
+
+        val stamped = PushPreferences(context).lastUploadedAtMillis
+        assertTrue("expected lastUploadedAtMillis to be stamped", stamped >= before)
+    }
+
+    // MARK: - foreground heartbeat observer
+
+    @Test
+    fun `initialize registers the foreground heartbeat observer`() {
+        assertFalse(HightouchPush.hasForegroundHeartbeatObserver)
+
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+
+        assertTrue(HightouchPush.hasForegroundHeartbeatObserver)
+    }
+
+    @Test
+    fun `resetForTesting clears the foreground heartbeat observer`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        assertTrue(HightouchPush.hasForegroundHeartbeatObserver)
+
+        HightouchPush.resetForTesting()
+
+        assertFalse(HightouchPush.hasForegroundHeartbeatObserver)
+    }
+
+    // MARK: - shouldUploadToken (cold-start dedupe + heartbeat decision)
+
+    private val interval = TimeUnit.HOURS.toMillis(24)
+
+    @Test
+    fun `shouldUploadToken uploads when token changed even within interval`() {
+        assertTrue(
+            HightouchPush.shouldUploadToken(
+                incomingToken = "new-token",
+                lastUploadedToken = "old-token",
+                lastUploadedAtMillis = 1_000L,
+                nowMillis = 1_000L,
+                intervalMillis = interval,
+            ),
+        )
+    }
+
+    @Test
+    fun `shouldUploadToken skips when token unchanged and within interval`() {
+        val now = interval * 10
+        assertFalse(
+            HightouchPush.shouldUploadToken(
+                incomingToken = "same-token",
+                lastUploadedToken = "same-token",
+                lastUploadedAtMillis = now - (interval - 1),
+                nowMillis = now,
+                intervalMillis = interval,
+            ),
+        )
+    }
+
+    @Test
+    fun `shouldUploadToken uploads when token unchanged but interval elapsed`() {
+        val now = interval * 10
+        assertTrue(
+            HightouchPush.shouldUploadToken(
+                incomingToken = "same-token",
+                lastUploadedToken = "same-token",
+                lastUploadedAtMillis = now - interval,
+                nowMillis = now,
+                intervalMillis = interval,
+            ),
+        )
+    }
+
+    @Test
+    fun `shouldUploadToken uploads when never uploaded before`() {
+        // lastUploadedAtMillis == 0 (the PushPreferences default) always uploads because a real
+        // epoch `now` dwarfs any interval.
+        assertTrue(
+            HightouchPush.shouldUploadToken(
+                incomingToken = "same-token",
+                lastUploadedToken = "same-token",
+                lastUploadedAtMillis = 0L,
+                nowMillis = System.currentTimeMillis(),
+                intervalMillis = interval,
+            ),
+        )
+    }
+
+    @Test
+    fun `shouldUploadToken uploads when no prior token recorded`() {
+        val now = interval * 10
+        assertTrue(
+            HightouchPush.shouldUploadToken(
+                incomingToken = "first-token",
+                lastUploadedToken = null,
+                lastUploadedAtMillis = now,
+                nowMillis = now,
+                intervalMillis = interval,
+            ),
+        )
+    }
+
+    // MARK: - HightouchPushConfig heartbeat interval clamp
+
+    @Test
+    fun `config defaults token upload interval to 24h`() {
+        val config = HightouchPushConfig.Builder("app-1").build()
+        assertEquals(TimeUnit.HOURS.toMillis(24), config.tokenUploadIntervalMillis)
+    }
+
+    @Test
+    fun `config clamps sub-minimum interval up to 12h`() {
+        val config = HightouchPushConfig.Builder("app-1")
+            .setTokenUploadInterval(TimeUnit.MINUTES.toMillis(5))
+            .build()
+        assertEquals(TimeUnit.HOURS.toMillis(12), config.tokenUploadIntervalMillis)
+    }
+
+    @Test
+    fun `config preserves interval at or above the minimum`() {
+        val sevenDays = TimeUnit.DAYS.toMillis(7)
+        val config = HightouchPushConfig.Builder("app-1")
+            .setTokenUploadInterval(sevenDays)
+            .build()
+        assertEquals(sevenDays, config.tokenUploadIntervalMillis)
     }
 
     private fun newMockAnalytics(

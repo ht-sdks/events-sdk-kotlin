@@ -2,8 +2,13 @@ package com.hightouch.analytics.kotlin.push
 
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.firebase.messaging.FirebaseMessaging
 import com.hightouch.analytics.kotlin.push.internal.CustomDataJson
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
@@ -37,6 +42,7 @@ object HightouchPush {
     private var _config: HightouchPushConfig? = null
     private var _prefs: PushPreferences? = null
     private var _currentUserId: String? = null
+    private var _lifecycleObserver: DefaultLifecycleObserver? = null
 
     /** The currently identified user id, or null if none. */
     @JvmStatic
@@ -113,14 +119,41 @@ object HightouchPush {
         // and that can happen before initialize() runs (FirebaseInitProvider starts FCM before
         // Application.onCreate; credentials may also be supplied at runtime). In those cases
         // handleTokenRefresh() already dropped the token and FCM won't call again until the next
-        // rotation. getToken() recovers the already-minted token regardless of timing.
+        // rotation. getToken() recovers the already-minted token regardless of timing. This is the
+        // process-start (incl. background-start) leg of the upload heartbeat.
         fetchCurrentFcmToken()
+        registerForegroundHeartbeat()
     }
 
     /**
-     * Fetch the current FCM token and [register] it if it differs from what we've persisted.
-     * Complements [HightouchFirebaseMessagingService.onNewToken], which only covers
-     * first-mint/rotation; this covers the steady state and late initialization.
+     * Observe app foreground transitions so the token-upload heartbeat also fires when a
+     * long-lived process is brought back to the foreground past the TTL — not only on cold start.
+     * Without it the heartbeat cadence is bound to how often the OS creates a fresh process, so a
+     * resident process could sit past the TTL without re-uploading. The re-upload stays gated by
+     * [shouldUploadToken] (via [fetchCurrentFcmToken]), so foregrounds within the interval are
+     * no-ops.
+     *
+     * Idempotent — only the first call registers. Registration is posted to the main thread
+     * because [ProcessLifecycleOwner] requires it, regardless of which thread called [initialize].
+     */
+    private fun registerForegroundHeartbeat() {
+        if (_lifecycleObserver != null) return
+        val observer = object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                fetchCurrentFcmToken()
+            }
+        }
+        _lifecycleObserver = observer
+        Handler(Looper.getMainLooper()).post {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+        }
+    }
+
+    /**
+     * Fetch the current FCM token and [register] it when the token has changed or the re-upload
+     * heartbeat has elapsed (see [shouldUploadToken]). Complements
+     * [HightouchFirebaseMessagingService.onNewToken], which only covers first-mint/rotation; this
+     * covers the steady state and late initialization.
      */
     private fun fetchCurrentFcmToken() {
         val messaging = try {
@@ -134,8 +167,21 @@ object HightouchPush {
         }
         messaging.token
             .addOnSuccessListener { token ->
-                // Skip if unchanged so we don't re-fire the "registered" event on every launch.
-                if (!token.isNullOrBlank() && token != _prefs?.token) {
+                val prefs = _prefs
+                if (token.isNullOrBlank() || prefs == null) return@addOnSuccessListener
+                val intervalMillis = _config?.tokenUploadIntervalMillis
+                    ?: HightouchPushConfig.DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS
+                // Re-upload on token change (rotation the OS didn't surface via onNewToken) or once
+                // the heartbeat elapses, so an unchanged token still refreshes its liveness signal
+                // instead of being deduped forever.
+                if (shouldUploadToken(
+                        incomingToken = token,
+                        lastUploadedToken = prefs.token,
+                        lastUploadedAtMillis = prefs.lastUploadedAtMillis,
+                        nowMillis = System.currentTimeMillis(),
+                        intervalMillis = intervalMillis,
+                    )
+                ) {
                     register(token)
                 }
             }
@@ -143,6 +189,22 @@ object HightouchPush {
                 Log.w(TAG, "Failed to fetch FCM token on init", e)
             }
     }
+
+    /**
+     * Whether a cold-start token fetch should re-upload (fire a "registered" event). True when the
+     * token changed since the last upload, or when the heartbeat interval has elapsed since it.
+     * A [lastUploadedAtMillis] of `0` (never uploaded) always uploads. Pure so it is unit-testable
+     * without the FCM/analytics machinery.
+     */
+    @VisibleForTesting
+    internal fun shouldUploadToken(
+        incomingToken: String,
+        lastUploadedToken: String?,
+        lastUploadedAtMillis: Long,
+        nowMillis: Long,
+        intervalMillis: Long,
+    ): Boolean =
+        incomingToken != lastUploadedToken || (nowMillis - lastUploadedAtMillis) >= intervalMillis
 
     /**
      * Register an FCM token. Called by [HightouchFirebaseMessagingService] when FCM delivers
@@ -157,6 +219,7 @@ object HightouchPush {
         val prefs = _prefs ?: error("[HightouchPush] Call initialize() before register().")
         val analytics = analyticsOrError()
         prefs.token = token
+        prefs.lastUploadedAtMillis = System.currentTimeMillis()
         analytics.setDeviceToken(token)
         CepEventTracking.track(
             name = CepEventTracking.PUSH_TOKEN_EVENTS,
@@ -248,6 +311,11 @@ object HightouchPush {
     private fun analyticsOrError(): Analytics =
         _analytics ?: error("[HightouchPush] Call initialize() before using the SDK.")
 
+    /** True once the process-foreground heartbeat observer has been registered. */
+    @VisibleForTesting
+    internal val hasForegroundHeartbeatObserver: Boolean
+        @Synchronized get() = _lifecycleObserver != null
+
     @VisibleForTesting
     @Synchronized
     internal fun resetForTesting() {
@@ -255,5 +323,13 @@ object HightouchPush {
         _config = null
         _prefs = null
         _currentUserId = null
+        _lifecycleObserver?.let { observer ->
+            try {
+                ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
+            } catch (_: Throwable) {
+                // ProcessLifecycleOwner may be uninitialized in a bare test env; ignore.
+            }
+        }
+        _lifecycleObserver = null
     }
 }

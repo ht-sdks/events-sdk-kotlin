@@ -22,6 +22,16 @@ internal class PushPreferences(context: Context) {
             }.apply()
         }
 
+    /**
+     * Epoch millis of the last token upload (registration event fired), or `0` if the token has
+     * never been uploaded. Drives the re-upload heartbeat in [HightouchPush].
+     */
+    var lastUploadedAtMillis: Long
+        get() = prefs.getLong(KEY_LAST_UPLOADED_AT, 0L)
+        set(value) {
+            prefs.edit().putLong(KEY_LAST_UPLOADED_AT, value).apply()
+        }
+
     fun clear() {
         prefs.edit().clear().apply()
     }
@@ -29,5 +39,6 @@ internal class PushPreferences(context: Context) {
     companion object {
         const val FILE_NAME = "hightouch_push_prefs"
         const val KEY_FCM_TOKEN = "fcm_token"
+        const val KEY_LAST_UPLOADED_AT = "last_uploaded_at_millis"
     }
 }
