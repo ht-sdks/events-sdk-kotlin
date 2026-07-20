@@ -29,13 +29,10 @@ import java.util.concurrent.TimeUnit
  *   false if your app drives all navigation itself and you never want the SDK to start the
  *   launcher activity.
  * @param tokenUploadIntervalMillis how long a token registration stays "fresh" before the SDK
- *   re-uploads it on the next cold start, even when the token is unchanged. This heartbeat keeps
- *   the server's `last_seen_at` a real liveness signal and lets a token that was wrongly
- *   invalidated (e.g. by the uninstall probe) self-revive on the next app open past this interval.
- *   Defaults to [DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS] (24h) and is clamped to a minimum of
- *   [MIN_TOKEN_UPLOAD_INTERVAL_MILLIS] (12h) — a shorter interval would risk turning the heartbeat
- *   into a per-launch firehose. There is intentionally no way to disable it: dedupe-forever is the
- *   failure mode this heartbeat removes.
+ *   re-uploads it on the next cold start even when the token is unchanged, keeping the server's
+ *   `last_seen_at` a real liveness signal. Defaults to [DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS] (24h)
+ *   and is clamped to a minimum of [MIN_TOKEN_UPLOAD_INTERVAL_MILLIS] (12h); there is intentionally
+ *   no way to disable it.
  */
 class HightouchPushConfig private constructor(
     val appId: String,
@@ -123,7 +120,7 @@ class HightouchPushConfig private constructor(
     }
 
     companion object {
-        /** Default token re-upload heartbeat interval: 24h, matching Airship. */
+        /** Default heartbeat interval (24h). */
         @JvmField
         val DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS: Long = TimeUnit.HOURS.toMillis(24)
 

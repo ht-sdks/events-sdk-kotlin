@@ -128,10 +128,8 @@ object HightouchPush {
     /**
      * Observe app foreground transitions so the token-upload heartbeat also fires when a
      * long-lived process is brought back to the foreground past the TTL — not only on cold start.
-     * Without it the heartbeat cadence is bound to how often the OS creates a fresh process, so a
-     * resident process could sit past the TTL without re-uploading. The re-upload stays gated by
-     * [shouldUploadToken] (via [fetchCurrentFcmToken]), so foregrounds within the interval are
-     * no-ops.
+     * The re-upload stays gated by [shouldUploadToken] (via [fetchCurrentFcmToken]), so foregrounds
+     * within the interval are no-ops.
      *
      * Idempotent — only the first call registers. Registration is posted to the main thread
      * because [ProcessLifecycleOwner] requires it, regardless of which thread called [initialize].
@@ -175,10 +173,7 @@ object HightouchPush {
     }
 
     /**
-     * Atomically decide (via [shouldUploadToken]) and, if due, [register] the token. Re-uploads on
-     * token change (a rotation the OS didn't surface via `onNewToken`) or once the heartbeat
-     * elapses, so an unchanged token refreshes its liveness signal instead of being deduped
-     * forever.
+     * Atomically decide (via [shouldUploadToken]) and, if due, [register] the token.
      *
      * Synchronized so the check-and-upload is a single critical section. [initialize]'s direct
      * fetch and the foreground observer can both resolve a token fetch on the same launch; without
@@ -204,8 +199,7 @@ object HightouchPush {
     /**
      * Whether a cold-start token fetch should re-upload (fire a "registered" event). True when the
      * token changed since the last upload, or when the heartbeat interval has elapsed since it.
-     * A [lastUploadedAtMillis] of `0` (never uploaded) always uploads. Pure so it is unit-testable
-     * without the FCM/analytics machinery.
+     * A [lastUploadedAtMillis] of `0` (never uploaded) always uploads.
      */
     @VisibleForTesting
     internal fun shouldUploadToken(
