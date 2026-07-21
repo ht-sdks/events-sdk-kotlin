@@ -55,15 +55,24 @@ class HightouchFirebaseMessagingServiceTest {
         verify {
             analytics.track(eq("CEP Push Token Events"), match<JsonObject> {
                 it["token"]?.jsonPrimitive?.content == "fcm-abc"
-            })
+            }, any())
         }
+    }
+
+    @Test
+    fun `handleTokenRefresh with an unchanged token within the heartbeat interval is a no-op`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+
+        HightouchFirebaseMessagingService.handleTokenRefresh("fcm-abc")
+        HightouchFirebaseMessagingService.handleTokenRefresh("fcm-abc")
+
+        verify(exactly = 1) { analytics.track("CEP Push Token Events", any<JsonObject>(), any()) }
     }
 
     @Test
     fun `handleTokenRefresh does not crash when SDK is uninitialized`() {
         // No HightouchPush.initialize() call.
         HightouchFirebaseMessagingService.handleTokenRefresh("fcm-abc")
-        // Pass — should swallow the IllegalStateException.
     }
 
     @Test
@@ -109,6 +118,9 @@ class HightouchFirebaseMessagingServiceTest {
             every { it.configuration } returns configuration
             every { it.userId() } returns null
             every { it.anonymousId() } returns "anon"
+            // A relaxed mock returns false for Booleans; register() gates the heartbeat stamp
+            // on enabled, so mirror the real default.
+            every { it.enabled } returns true
             // See HightouchPushTest.newMockAnalytics — keeps setDeviceToken's relaxed-mock cast
             // from blowing up under Robolectric's classloader.
             every { it.find(DeviceToken::class) } returns null

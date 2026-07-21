@@ -14,6 +14,7 @@ import com.hightouch.analytics.kotlin.push.internal.CustomDataJson
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.android.Analytics as AndroidAnalytics
 import com.hightouch.analytics.kotlin.core.Analytics
+import com.hightouch.analytics.kotlin.core.platform.EnrichmentClosure
 import com.hightouch.analytics.kotlin.core.platform.plugins.setDeviceToken
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -24,8 +25,8 @@ import kotlinx.serialization.json.put
  * Lifecycle (matches the iOS counterpart `HightouchPush.swift`):
  *   1. Host app calls [initialize] once at startup.
  *   2. FCM delivers a token (PR 5 wires this via [HightouchFirebaseMessagingService]). The SDK
- *      forwards it to [register], which persists the token and fires a `"CEP Push Token Events"`
- *      event with `provider_event_type = "registered"`.
+ *      forwards it through the upload gate to [register], which persists the token and fires a
+ *      `"CEP Push Token Events"` event with `provider_event_type = "registered"`.
  *   3. On login, host app calls [identify] with the user's id. This re-fires the registration
  *      event so the token can be associated with the new user.
  *   4. On logout, host app calls [logout]. The SDK fires `"CEP Push Token Events"` with
@@ -163,13 +164,28 @@ object HightouchPush {
             Log.w(TAG, "FirebaseApp not initialized; skipping FCM token fetch", e)
             return
         }
+        val tokenAtFetchStart = _prefs?.token
         messaging.token
             .addOnSuccessListener { token ->
-                if (!token.isNullOrBlank()) registerIfDue(token)
+                if (!token.isNullOrBlank()) registerFetchedTokenIfDue(token, tokenAtFetchStart)
             }
             .addOnFailureListener { e ->
                 Log.w(TAG, "Failed to fetch FCM token on init", e)
             }
+    }
+
+    /**
+     * Gate for tokens delivered by an async token fetch. The fetched value is a snapshot: if a
+     * different token was registered while the fetch was in flight (an `onNewToken` rotation),
+     * the snapshot may be *older* than what we already hold, and the direction-blind inequality
+     * in [shouldUploadToken] would re-register the dead token. Drop the snapshot instead — the
+     * next fetch (foreground/cold start) re-syncs if anything was missed.
+     */
+    @Synchronized
+    @VisibleForTesting
+    internal fun registerFetchedTokenIfDue(token: String, tokenAtFetchStart: String?) {
+        if (_prefs?.token != tokenAtFetchStart) return
+        registerIfDue(token)
     }
 
     /**
@@ -180,7 +196,7 @@ object HightouchPush {
      * atomicity both could observe a stale timestamp and upload, firing a duplicate "registered".
      */
     @Synchronized
-    private fun registerIfDue(token: String) {
+    internal fun registerIfDue(token: String) {
         val prefs = _prefs ?: return
         val intervalMillis = _config?.tokenUploadIntervalMillis
             ?: HightouchPushConfig.DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS
@@ -199,7 +215,9 @@ object HightouchPush {
     /**
      * Whether a cold-start token fetch should re-upload (fire a "registered" event). True when the
      * token changed since the last upload, or when the heartbeat interval has elapsed since it.
-     * A [lastUploadedAtMillis] of `0` (never uploaded) always uploads.
+     * A [lastUploadedAtMillis] of `0` (never uploaded) always uploads. A stamp in the future
+     * (wall clock moved backwards since it was written) also uploads — otherwise the heartbeat
+     * would stay suppressed until real time caught up to the bad stamp.
      */
     @VisibleForTesting
     internal fun shouldUploadToken(
@@ -209,7 +227,9 @@ object HightouchPush {
         nowMillis: Long,
         intervalMillis: Long,
     ): Boolean =
-        incomingToken != lastUploadedToken || (nowMillis - lastUploadedAtMillis) >= intervalMillis
+        incomingToken != lastUploadedToken ||
+            nowMillis < lastUploadedAtMillis ||
+            (nowMillis - lastUploadedAtMillis) >= intervalMillis
 
     /**
      * Register an FCM token. Called by [HightouchFirebaseMessagingService] when FCM delivers
@@ -224,8 +244,10 @@ object HightouchPush {
         val prefs = _prefs ?: error("[HightouchPush] Call initialize() before register().")
         val analytics = analyticsOrError()
         prefs.token = token
-        prefs.lastUploadedAtMillis = System.currentTimeMillis()
         analytics.setDeviceToken(token)
+        // User info is applied to events asynchronously; stamp the userId captured now so a
+        // concurrent identify/reset can't attribute this event to the wrong user.
+        val capturedUserId = _currentUserId
         CepEventTracking.track(
             name = CepEventTracking.PUSH_TOKEN_EVENTS,
             properties = buildJsonObject {
@@ -233,7 +255,17 @@ object HightouchPush {
                 put("token", token)
                 put("platform", "android")
             },
+            enrichment = { event ->
+                event?.also { e -> capturedUserId?.let { e.userId = it } }
+            },
         )
+        if (analytics.enabled) {
+            prefs.lastUploadedAtMillis = System.currentTimeMillis()
+        } else {
+            // process() silently drops events while analytics is disabled. Clear the stamp so
+            // the next heartbeat retries the upload instead of treating the drop as a success.
+            prefs.lastUploadedAtMillis = 0L
+        }
     }
 
     /**
@@ -255,8 +287,10 @@ object HightouchPush {
         }
         _currentUserId = userId
         analyticsOrError().identify(userId)
-        // Re-fire the token event so the new user shows up on the registration.
-        _prefs?.token?.let { register(it) }
+        // Re-fire the token event so the new user shows up on the registration. When the user is
+        // unchanged (e.g. an app that identifies on every launch), go through the heartbeat gate
+        // instead so repeat identifies don't emit duplicate "registered" events.
+        _prefs?.token?.let { if (current != userId) register(it) else registerIfDue(it) }
     }
 
     /**
@@ -271,6 +305,10 @@ object HightouchPush {
     fun logout() {
         val outgoingUserId = _currentUserId ?: return
         val analytics = analyticsOrError()
+        // Capture identity before reset(): reset swaps in a new anonymousId immediately, while
+        // the event is attributed asynchronously — without the explicit stamp below, the
+        // "disabled" event usually lands under the post-reset anonymous user.
+        val outgoingAnonymousId = analytics.anonymousId()
         _prefs?.token?.let { token ->
             CepEventTracking.track(
                 name = CepEventTracking.PUSH_TOKEN_EVENTS,
@@ -278,6 +316,12 @@ object HightouchPush {
                     put("provider_event_type", CepEventTracking.TOKEN_DISABLED)
                     put("token", token)
                     put("userId", outgoingUserId)
+                },
+                enrichment = { event ->
+                    event?.also {
+                        it.userId = outgoingUserId
+                        it.anonymousId = outgoingAnonymousId
+                    }
                 },
             )
         }

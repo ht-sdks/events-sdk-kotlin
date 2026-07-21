@@ -1,5 +1,6 @@
 package com.hightouch.analytics.kotlin.push
 
+import com.hightouch.analytics.kotlin.core.platform.EnrichmentClosure
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -59,9 +60,10 @@ internal object CepEventTracking {
         name: String,
         properties: JsonObject = EMPTY,
         messageContext: JsonObject? = null,
+        enrichment: EnrichmentClosure? = null,
     ) {
         val analytics = HightouchPush.cepAnalytics ?: return
-        analytics.track(name, mergedProperties(properties, messageContext))
+        analytics.track(name, mergedProperties(properties, messageContext), enrichment)
     }
 
     private val EMPTY: JsonObject = JsonObject(emptyMap())

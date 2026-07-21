@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.core.Analytics
 import com.hightouch.analytics.kotlin.core.Configuration
+import com.hightouch.analytics.kotlin.core.TrackEvent
+import com.hightouch.analytics.kotlin.core.platform.EnrichmentClosure
 import com.hightouch.analytics.kotlin.core.platform.plugins.DeviceToken
 import io.mockk.every
 import io.mockk.mockk
@@ -63,7 +65,7 @@ class HightouchPushTest {
 
         val capturedProps = slot<JsonObject>()
         every {
-            analytics.track("CEP Push Token Events", capture(capturedProps))
+            analytics.track("CEP Push Token Events", capture(capturedProps), any())
         } returns Unit
 
         HightouchPush.register("fcm-token-xyz")
@@ -89,7 +91,7 @@ class HightouchPushTest {
         // analytics.identify called for the new user
         verify { analytics.identify("user-1") }
         // register fires "registered" — once on the initial register, once after identify
-        verify(exactly = 2) { analytics.track("CEP Push Token Events", any<JsonObject>()) }
+        verify(exactly = 2) { analytics.track("CEP Push Token Events", any<JsonObject>(), any()) }
         assertEquals("user-1", HightouchPush.userId)
     }
 
@@ -112,7 +114,7 @@ class HightouchPushTest {
         // Capture from before the register call so all token events end up in the list, not
         // just the ones fired by identify.
         val captured = mutableListOf<JsonObject>()
-        every { analytics.track("CEP Push Token Events", capture(captured)) } returns Unit
+        every { analytics.track("CEP Push Token Events", capture(captured), any()) } returns Unit
 
         HightouchPush.register("fcm-token-xyz")
         HightouchPush.identify("user-1")
@@ -141,7 +143,7 @@ class HightouchPushTest {
         HightouchPush.identify("user-1")
 
         val captured = slot<JsonObject>()
-        every { analytics.track("CEP Push Token Events", capture(captured)) } returns Unit
+        every { analytics.track("CEP Push Token Events", capture(captured), any()) } returns Unit
 
         HightouchPush.logout()
 
@@ -162,7 +164,7 @@ class HightouchPushTest {
 
         verify(exactly = 0) { analytics.track("CEP Push Token Events", match<JsonObject> {
             it["provider_event_type"]?.jsonPrimitive?.content == "disabled"
-        }) }
+        }, any()) }
         verify(exactly = 0) { analytics.reset() }
     }
 
@@ -182,6 +184,97 @@ class HightouchPushTest {
 
         val stamped = PushPreferences(context).lastUploadedAtMillis
         assertTrue("expected lastUploadedAtMillis to be stamped", stamped >= before)
+    }
+
+    @Test
+    fun `register while analytics is disabled clears the heartbeat stamp so the next heartbeat retries`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        assertTrue(PushPreferences(context).lastUploadedAtMillis > 0)
+
+        // process() drops events silently while analytics is disabled; the stamp must not
+        // claim the dropped upload succeeded.
+        every { analytics.enabled } returns false
+        HightouchPush.register("fcm-token-2")
+
+        assertEquals("fcm-token-2", PushPreferences(context).token)
+        assertEquals(0L, PushPreferences(context).lastUploadedAtMillis)
+    }
+
+    @Test
+    fun `repeat identify with the same user does not emit a duplicate registered event`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+
+        HightouchPush.identify("user-1") // user change: forced re-register
+        HightouchPush.identify("user-1") // unchanged: gated, token fresh, no event
+
+        verify(exactly = 2) { analytics.track("CEP Push Token Events", any<JsonObject>(), any()) }
+    }
+
+    @Test
+    fun `register stamps the registered event with the current userId`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.identify("user-1") // no token cached yet, so no register fires here
+
+        val enrichmentSlot = slot<EnrichmentClosure>()
+        every {
+            analytics.track("CEP Push Token Events", any<JsonObject>(), capture(enrichmentSlot))
+        } returns Unit
+
+        HightouchPush.register("fcm-token-xyz")
+
+        // Run the closure as the pipeline would (after UserInfoPlugin) — it must pin the userId
+        // captured at register() time even if the store hasn't applied SetUserIdAction yet.
+        val event = TrackEvent(properties = JsonObject(emptyMap()), event = "CEP Push Token Events")
+        val enriched = enrichmentSlot.captured(event) as TrackEvent
+        assertEquals("user-1", enriched.userId)
+    }
+
+    @Test
+    fun `logout stamps the disabled event with the pre-reset identity`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        HightouchPush.identify("user-1")
+
+        val enrichmentSlot = slot<EnrichmentClosure>()
+        every {
+            analytics.track("CEP Push Token Events", any<JsonObject>(), capture(enrichmentSlot))
+        } returns Unit
+
+        HightouchPush.logout()
+
+        // reset() swaps in a new anonymousId immediately; the enrichment must restore the
+        // outgoing identity captured before the reset.
+        val event = TrackEvent(properties = JsonObject(emptyMap()), event = "CEP Push Token Events")
+        event.anonymousId = "post-reset-anon"
+        val enriched = enrichmentSlot.captured(event) as TrackEvent
+        assertEquals("user-1", enriched.userId)
+        assertEquals("anon-123", enriched.anonymousId)
+    }
+
+    // MARK: - stale fetched-token guard
+
+    @Test
+    fun `registerFetchedTokenIfDue drops a fetch snapshot that raced a newer registration`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        // A token fetch started when no token was stored yet...
+        val tokenAtFetchStart: String? = null
+        // ...then onNewToken registered a fresh token while the fetch was in flight.
+        HightouchPush.register("fresh-token")
+
+        HightouchPush.registerFetchedTokenIfDue("stale-token", tokenAtFetchStart)
+
+        assertEquals("fresh-token", PushPreferences(context).token)
+    }
+
+    @Test
+    fun `registerFetchedTokenIfDue registers when no registration raced the fetch`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+
+        HightouchPush.registerFetchedTokenIfDue("fetched-token", null)
+
+        assertEquals("fetched-token", PushPreferences(context).token)
     }
 
     // MARK: - foreground heartbeat observer
@@ -244,6 +337,20 @@ class HightouchPushTest {
                 incomingToken = "same-token",
                 lastUploadedToken = "same-token",
                 lastUploadedAtMillis = now - interval,
+                nowMillis = now,
+                intervalMillis = interval,
+            ),
+        )
+    }
+
+    @Test
+    fun `shouldUploadToken uploads when clock rolled back past the last upload stamp`() {
+        val now = interval * 10
+        assertTrue(
+            HightouchPush.shouldUploadToken(
+                incomingToken = "same-token",
+                lastUploadedToken = "same-token",
+                lastUploadedAtMillis = now + 1, // stamped while the wall clock was ahead
                 nowMillis = now,
                 intervalMillis = interval,
             ),
@@ -316,6 +423,9 @@ class HightouchPushTest {
             every { it.configuration } returns configuration
             every { it.userId() } returns userId
             every { it.anonymousId() } returns anonymousId
+            // A relaxed mock returns false for Booleans; register() gates the heartbeat stamp
+            // on enabled, so mirror the real default.
+            every { it.enabled } returns true
             // setDeviceToken does `find(DeviceToken::class) as DeviceToken`. With a relaxed mock,
             // find() returns a generic Plugin mock from MockK's classloader; the cast then fails
             // with ClassCastException under Robolectric's separate classloader. Force null so
