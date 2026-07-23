@@ -34,16 +34,14 @@ class HightouchFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
 
         /**
-         * Forward an FCM token refresh to the Hightouch SDK. No-op if the SDK has not been
-         * initialized yet (the next refresh after initialization will deliver the token).
+         * Forward an FCM token refresh to the Hightouch SDK. Routed through the upload gate so a
+         * redelivered unchanged token doesn't emit a duplicate "registered" event; a genuinely
+         * new token always passes the gate. No-op if the SDK has not been initialized yet — the
+         * token fetch in `initialize()` recovers the token in that case.
          */
         @JvmStatic
         fun handleTokenRefresh(token: String) {
-            try {
-                HightouchPush.register(token)
-            } catch (_: IllegalStateException) {
-                // SDK not initialized yet — FCM will call us again on the next refresh.
-            }
+            HightouchPush.registerIfDue(token)
         }
 
         /**
