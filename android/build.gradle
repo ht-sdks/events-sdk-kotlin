@@ -6,7 +6,8 @@ plugins {
 }
 
 android {
-    compileSdkVersion 33
+    namespace 'com.hightouch.analytics'
+    compileSdk 34
 
     defaultConfig {
         // Required when setting minSdkVersion to 20 or lower
@@ -46,7 +47,7 @@ dependencies {
     // MAIN DEPS
     api project(':core')
     api 'com.segment:sovran-kotlin:1.2.2'
-    api "org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1"
+    api "org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0"
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1'
     implementation 'androidx.lifecycle:lifecycle-process:2.6.1'
@@ -55,7 +56,7 @@ dependencies {
 
     // TESTING
     testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
-    testImplementation 'io.mockk:mockk:1.12.2'
+    testImplementation 'io.mockk:mockk:1.14.11'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.1'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
@@ -69,7 +70,7 @@ dependencies {
     testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.8.2'
 
     // Add Roboelectric dependencies.
-    testImplementation 'org.robolectric:robolectric:4.7.3'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
     testImplementation 'androidx.test:core:1.5.0'
 }
 

@@ -3,7 +3,8 @@ plugins {
 }
 
 android {
-    compileSdkVersion 33
+    namespace 'com.hightouch.analytics.javaandroidapp'
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.hightouch.analytics.javaandroidapp"
@@ -26,6 +27,9 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
+    }
+    buildFeatures {
+        buildConfig true
     }
 }
 

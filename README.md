@@ -62,7 +62,7 @@ See [`JAVA_COMPAT.md`](JAVA_COMPAT.md) for the full Java interop surface.
 
 ## Building
 
-Requires **JDK 11** (transitive MockK pin is incompatible with JDK 17+).
+Requires **JDK 17** (Android Gradle Plugin 8.5+).
 
 ```bash
 export JAVA_HOME=$(/usr/libexec/java_home -v 11)
