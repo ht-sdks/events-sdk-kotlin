@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:tools="http://schemas.android.com/tools">
+    <!-- Test-only: modern androidx.test artifacts require API 19+. The
+         published library minSdk stays 16. -->
+    <uses-sdk tools:overrideLibrary="androidx.test.monitor,androidx.test.espresso.idling.resource,androidx.test.core,androidx.test.services.storage,androidx.test.ext.junit,androidx.tracing,androidx.test.annotation" />
+</manifest>

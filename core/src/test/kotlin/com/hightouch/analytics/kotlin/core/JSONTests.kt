@@ -412,7 +412,7 @@ class JSONTests {
                 put("Mr. Freeze", true)
             }
 
-            val newMap = map.transformKeys { it.toUpperCase() }
+            val newMap = map.transformKeys { it.uppercase() }
 
             with(newMap) {
                 assertTrue(containsKey("JOKER"))

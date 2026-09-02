@@ -32,11 +32,24 @@ allprojects {
     }
     tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
         kotlinOptions {
-            // Keep DefaultImpls so existing Java consumers of interface
-            // default methods stay binary-compatible after the 2.x default change.
-            freeCompilerArgs = ['-Xjvm-default=all-compatibility']
+            // Kotlin 2.2+ defaults to -jvm-default=enable (old all-compatibility),
+            // which keeps DefaultImpls for existing Java consumers.
             jvmTarget = "1.8"
         }
+    }
+    // MockK spies Date/UUID/HttpsURLConnection. JDK 17+ hides those internals.
+    tasks.withType(Test).configureEach {
+        jvmArgs(
+            '--add-opens=java.base/java.lang=ALL-UNNAMED',
+            '--add-opens=java.base/java.time=ALL-UNNAMED',
+            '--add-opens=java.base/java.util=ALL-UNNAMED',
+            '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+            '--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED',
+            '--add-opens=java.base/java.net=ALL-UNNAMED',
+            '--add-opens=java.base/javax.net.ssl=ALL-UNNAMED',
+            '--add-opens=java.base/sun.net.www.protocol.http=ALL-UNNAMED',
+            '--add-opens=java.base/sun.net.www.protocol.https=ALL-UNNAMED'
+        )
     }
     group GROUP
     version getVersionName()

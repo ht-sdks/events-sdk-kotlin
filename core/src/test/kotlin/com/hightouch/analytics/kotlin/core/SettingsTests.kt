@@ -179,7 +179,7 @@ class SettingsTests {
         analytics.add(mockPlugin)
 
         // settings is already available, update with Initial
-        verify (exactly =  1) {
+        verify(timeout = 3000, exactly = 1) {
             mockPlugin.update(any(), Plugin.UpdateType.Initial)
         }
         val system = analytics.store.currentState(System::class)
