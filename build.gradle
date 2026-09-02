@@ -1,6 +1,8 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 buildscript {
-    ext.kotlin_version = "1.8.0"
+    // 2.4.20-RC3 is the newest release that includes the CVE-2026-53914
+    // build-cache deserialization fix. Stable 2.4.20 is not on Maven Central yet.
+    ext.kotlin_version = "2.4.20-RC3"
     // Sample apps read this via BuildConfig.SEGMENT_WRITE_KEY. Set to a real
     // Hightouch write key locally (or via -PwriteKey=...) before running samples.
     ext.writeKey = ""
@@ -9,15 +11,17 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.4.2'
+        // Kotlin 2.4.x requires AGP 8.5.2+.
+        classpath 'com.android.tools.build:gradle:8.5.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
         classpath "org.jetbrains.kotlin:kotlin-serialization:$kotlin_version"
+        classpath "org.jetbrains.kotlin:compose-compiler-gradle-plugin:$kotlin_version"
 
         // needed for android unit tests
-        classpath("de.mannodermaus.gradle.plugins:android-junit5:1.9.3.0")
+        classpath("de.mannodermaus.gradle.plugins:android-junit5:1.13.4.0")
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
-        classpath 'com.google.gms:google-services:4.3.15'
+        classpath 'com.google.gms:google-services:4.4.2'
     }
 }
 
@@ -26,11 +30,26 @@ allprojects {
         google()
         mavenCentral()
     }
-    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
         kotlinOptions {
-            freeCompilerArgs = ['-Xjvm-default=enable']
+            // Kotlin 2.2+ defaults to -jvm-default=enable (old all-compatibility),
+            // which keeps DefaultImpls for existing Java consumers.
             jvmTarget = "1.8"
         }
+    }
+    // MockK spies Date/UUID/HttpsURLConnection. JDK 17+ hides those internals.
+    tasks.withType(Test).configureEach {
+        jvmArgs(
+            '--add-opens=java.base/java.lang=ALL-UNNAMED',
+            '--add-opens=java.base/java.time=ALL-UNNAMED',
+            '--add-opens=java.base/java.util=ALL-UNNAMED',
+            '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+            '--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED',
+            '--add-opens=java.base/java.net=ALL-UNNAMED',
+            '--add-opens=java.base/javax.net.ssl=ALL-UNNAMED',
+            '--add-opens=java.base/sun.net.www.protocol.http=ALL-UNNAMED',
+            '--add-opens=java.base/sun.net.www.protocol.https=ALL-UNNAMED'
+        )
     }
     group GROUP
     version getVersionName()

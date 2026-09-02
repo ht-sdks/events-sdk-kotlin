@@ -8,6 +8,7 @@ import com.hightouch.analytics.kotlin.core.platform.plugins.SegmentDestination
 import com.hightouch.analytics.kotlin.core.utilities.SegmentInstant
 import com.hightouch.analytics.kotlin.core.utils.StubPlugin
 import com.hightouch.analytics.kotlin.core.utils.TestRunPlugin
+import com.hightouch.analytics.kotlin.core.utils.clearPersistentStorage
 import com.hightouch.analytics.kotlin.core.utils.mockHTTPClient
 import com.hightouch.analytics.kotlin.core.utils.testAnalytics
 import io.mockk.*
@@ -51,6 +52,7 @@ internal class JavaAnalyticsTest {
 
     @BeforeEach
     fun setup() {
+        clearPersistentStorage("java-123")
         val config = ConfigurationBuilder("java-123")
             .setApplication("Test")
             .setAutoAddSegmentDestination(false)
@@ -623,6 +625,5 @@ internal class JavaAnalyticsTest {
         timestamp = epochTimestamp
         context = baseContext
         integrations = emptyJsonObject
-        userId = "userId"
     }
 }

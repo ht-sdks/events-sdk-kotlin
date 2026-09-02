@@ -6,7 +6,8 @@ plugins {
 }
 
 android {
-    compileSdkVersion 33
+    namespace 'com.hightouch.analytics.next'
+    compileSdk 34
 
     defaultConfig {
         multiDexEnabled true
@@ -33,6 +34,9 @@ android {
     }
     kotlinOptions {
         jvmTarget = '1.8'
+    }
+    buildFeatures {
+        buildConfig true
     }
 }
 
