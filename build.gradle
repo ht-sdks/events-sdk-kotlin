@@ -20,10 +20,6 @@ buildscript {
     }
 }
 
-plugins {
-    id "io.snyk.gradle.plugin.snykplugin" version "0.4"
-}
-
 allprojects {
     repositories {
         google()
@@ -39,13 +35,6 @@ allprojects {
     }
     group GROUP
     version getVersionName()
-}
-
-snyk {
-    // severity = 'high'
-    autoDownload = true
-    autoUpdate = true
-    arguments = '--all-sub-projects --fail-on=upgradable'
 }
 
 task clean(type: Delete) {
