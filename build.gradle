@@ -6,6 +6,7 @@ buildscript {
     ext.writeKey = ""
     repositories {
         google()
+        mavenCentral()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:7.4.2'
@@ -18,10 +19,6 @@ buildscript {
         // in the individual module build.gradle files
         classpath 'com.google.gms:google-services:4.3.15'
     }
-}
-
-plugins {
-    id "io.snyk.gradle.plugin.snykplugin" version "0.4"
 }
 
 allprojects {
@@ -37,13 +34,6 @@ allprojects {
     }
     group GROUP
     version getVersionName()
-}
-
-snyk {
-    // severity = 'high'
-    autoDownload = true
-    autoUpdate = true
-    arguments = '--all-sub-projects --fail-on=upgradable'
 }
 
 task clean(type: Delete) {
