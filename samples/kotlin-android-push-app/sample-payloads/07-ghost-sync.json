@@ -1,0 +1,8 @@
+{
+  "message": {
+    "token": "REPLACE_WITH_DEVICE_TOKEN",
+    "data": {
+      "hightouch": "{\"messageId\":\"sample-007\",\"command\":{\"verb\":\"syncMessages\",\"reason\":\"manual_sample_test\"},\"messageContext\":{\"executionId\":\"exec_sample_1\",\"campaignId\":\"camp_sample_1\",\"campaignRunId\":\"run_sample_1\"}}"
+    }
+  }
+}
