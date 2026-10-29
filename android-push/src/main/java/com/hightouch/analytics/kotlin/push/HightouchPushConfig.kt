@@ -1,5 +1,6 @@
 package com.hightouch.analytics.kotlin.push
 
+import com.hightouch.analytics.kotlin.push.messages.HightouchMessagesConfig
 import java.util.concurrent.TimeUnit
 
 /**
@@ -33,6 +34,8 @@ import java.util.concurrent.TimeUnit
  *   `last_seen_at` a real liveness signal. Defaults to [DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS] (24h)
  *   and is clamped to a minimum of [MIN_TOKEN_UPLOAD_INTERVAL_MILLIS] (12h); there is intentionally
  *   no way to disable it.
+ * @param messages enables embedded messages when set. Null (the default) leaves the feature off.
+ *   See [HightouchMessagesConfig].
  */
 class HightouchPushConfig private constructor(
     val appId: String,
@@ -45,6 +48,7 @@ class HightouchPushConfig private constructor(
     val notificationColorResId: Int?,
     val autoLaunchApp: Boolean,
     val tokenUploadIntervalMillis: Long,
+    val messages: HightouchMessagesConfig?,
 ) {
     /**
      * Fluent builder for [HightouchPushConfig]. The required [appId] is the constructor
@@ -76,6 +80,7 @@ class HightouchPushConfig private constructor(
         private var notificationColorResId: Int? = null
         private var autoLaunchApp: Boolean = true
         private var tokenUploadIntervalMillis: Long = DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS
+        private var messages: HightouchMessagesConfig? = null
 
         fun setUrlHandler(handler: HightouchUrlHandler?): Builder = apply { urlHandler = handler }
 
@@ -104,6 +109,9 @@ class HightouchPushConfig private constructor(
         fun setTokenUploadInterval(millis: Long): Builder =
             apply { tokenUploadIntervalMillis = millis }
 
+        /** Enable embedded messages. See [HightouchPushConfig.messages]. */
+        fun setMessages(config: HightouchMessagesConfig?): Builder = apply { messages = config }
+
         fun build(): HightouchPushConfig = HightouchPushConfig(
             appId = appId,
             urlHandler = urlHandler,
@@ -116,6 +124,7 @@ class HightouchPushConfig private constructor(
             autoLaunchApp = autoLaunchApp,
             tokenUploadIntervalMillis =
                 tokenUploadIntervalMillis.coerceAtLeast(MIN_TOKEN_UPLOAD_INTERVAL_MILLIS),
+            messages = messages,
         )
     }
 
