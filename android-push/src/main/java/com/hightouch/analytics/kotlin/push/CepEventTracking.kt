@@ -24,11 +24,25 @@ internal object CepEventTracking {
 
     /** Canonical event type value sent on the wire. */
     const val PUSH_OPENED = "opened"
+    const val PUSH_DELIVERED = "delivered"
 
-    /** Properties attached to every CEP push event. */
-    fun baseProperties(): JsonObject = buildJsonObject {
-        put("channel_type", "push")
-        put("_ht_cep_source", "push_sdk")
+    // In-app events share ENGAGEMENT_EVENTS with push; `channel_type` distinguishes them.
+    const val MESSAGE_DISPLAYED = "displayed"
+
+    /** Deliberately not `opened`, which for push means the notification opened the app. */
+    const val MESSAGE_CLICKED = "clicked"
+    const val MESSAGE_DISMISSED = "dismissed"
+
+    /** The channel an event belongs to. Sent as `channel_type`; also selects `_ht_cep_source`. */
+    enum class Channel(val channelType: String, val source: String) {
+        PUSH("push", "push_sdk"),
+        IN_APP("in_app", "in_app_sdk"),
+    }
+
+    /** Properties attached to every CEP event. */
+    fun baseProperties(channel: Channel = Channel.PUSH): JsonObject = buildJsonObject {
+        put("channel_type", channel.channelType)
+        put("_ht_cep_source", channel.source)
         put("app_id", HightouchPush.cepAppId)
     }
 
@@ -43,12 +57,13 @@ internal object CepEventTracking {
     fun mergedProperties(
         properties: JsonObject = EMPTY,
         messageContext: JsonObject? = null,
+        channel: Channel = Channel.PUSH,
     ): JsonObject = buildJsonObject {
         // for-loop iteration (not Map.forEach) to avoid the API-24 java.util.Map.forEach binding;
         // the minSdk is 21.
         messageContext?.let { for ((k, v) in it) put(k, v) }
         for ((k, v) in properties) put(k, v)
-        for ((k, v) in baseProperties()) put(k, v)
+        for ((k, v) in baseProperties(channel)) put(k, v)
     }
 
     /**
@@ -61,9 +76,10 @@ internal object CepEventTracking {
         properties: JsonObject = EMPTY,
         messageContext: JsonObject? = null,
         enrichment: EnrichmentClosure? = null,
+        channel: Channel = Channel.PUSH,
     ) {
         val analytics = HightouchPush.cepAnalytics ?: return
-        analytics.track(name, mergedProperties(properties, messageContext), enrichment)
+        analytics.track(name, mergedProperties(properties, messageContext, channel), enrichment)
     }
 
     private val EMPTY: JsonObject = JsonObject(emptyMap())
