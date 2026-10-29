@@ -151,7 +151,7 @@ internal class MessageStore(
      * this read is deleted after this call.
      * @param limit Keeps only the owner's first [limit] messages in `PRIORITY_THEN_NEWEST` order,
      * so an owner whose server set exceeds the cap converges instead of being evicted and
-     * re-inserted on every sync. `null` or negative is unlimited; `0` keeps nothing.
+     * re-inserted on every sync. `null` is unlimited; `0` or negative keeps nothing (as on iOS).
      */
     fun replaceAll(
         messages: List<HightouchMessage>,
@@ -168,8 +168,8 @@ internal class MessageStore(
             byId[message.messageId] = message
         }
         var unique: List<HightouchMessage> = byId.values.toList()
-        if (limit != null && limit >= 0 && unique.size > limit) {
-            unique = unique.sortedWith(PRIORITY_THEN_NEWEST).take(limit)
+        if (limit != null && unique.size > limit) {
+            unique = unique.sortedWith(PRIORITY_THEN_NEWEST).take(maxOf(limit, 0))
         }
 
         val insertedIds = ArrayList<String>()

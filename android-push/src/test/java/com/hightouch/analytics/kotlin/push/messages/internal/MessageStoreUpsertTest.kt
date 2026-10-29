@@ -199,17 +199,27 @@ class MessageStoreUpsertTest {
     }
 
     @Test
-    fun `lowering the limit removes rows beyond it and null or negative is unlimited`() {
+    fun `lowering the limit removes rows beyond it and null is unlimited`() {
         val messages = (0 until 4).map { makeMessage("m$it", createdAtMillis = T0 + it * 1000L) }
         store.replaceAll(messages, alice)
         assertEquals(4, store.totalCount())
 
-        store.replaceAll(messages, alice, limit = -1)
+        store.replaceAll(messages, alice, limit = null)
         assertEquals(4, store.totalCount())
 
         val outcome = store.replaceAll(messages, alice, limit = 1)
         assertEquals(setOf("m0", "m1", "m2"), outcome.removedIds.toSet())
         assertEquals(listOf("m3"), store.ids(alice))
+    }
+
+    @Test
+    fun `a negative limit keeps nothing as on iOS`() {
+        val messages = (0 until 3).map { makeMessage("m$it", createdAtMillis = T0 + it * 1000L) }
+        store.replaceAll(messages, alice)
+
+        val outcome = store.replaceAll(messages, alice, limit = -1)
+        assertEquals(setOf("m0", "m1", "m2"), outcome.removedIds.toSet())
+        assertEquals(0, store.totalCount())
     }
 
     // Store cap: enforceLimit
