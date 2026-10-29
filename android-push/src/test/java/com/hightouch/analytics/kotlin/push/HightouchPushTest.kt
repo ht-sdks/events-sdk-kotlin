@@ -13,7 +13,9 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -91,6 +93,22 @@ class HightouchPushTest {
         // analytics.identify called for the new user
         verify { analytics.identify("user-1") }
         // register fires "registered" — once on the initial register, once after identify
+        verify(exactly = 2) { analytics.track("CEP Push Token Events", any<JsonObject>(), any()) }
+        assertEquals("user-1", HightouchPush.userId)
+    }
+
+    @Test
+    fun `identify with traits forwards them to analytics-identify and re-fires register`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        val traits = buildJsonObject {
+            put("email", "user-1@example.com")
+            put("plan", "pro")
+        }
+
+        HightouchPush.identify("user-1", traits)
+
+        verify { analytics.identify("user-1", traits) }
         verify(exactly = 2) { analytics.track("CEP Push Token Events", any<JsonObject>(), any()) }
         assertEquals("user-1", HightouchPush.userId)
     }

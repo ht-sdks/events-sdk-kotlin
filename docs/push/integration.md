@@ -64,6 +64,10 @@ See [Handlers & deep links](handlers-and-deep-links.md) for the `HightouchPushCo
 | `HightouchPush.identify("user-123")` | User logs in | Associates the token with the user |
 | `HightouchPush.logout()` | User logs out | Fires a `disabled` token event and resets analytics |
 
+To record user traits, pass them to `identify` (e.g.
+`HightouchPush.identify("user-123", buildJsonObject { put("email", "a@b.com") })`). Use this in
+place of `analytics.identify`, which would skip the token re-association.
+
 Read-only state: `HightouchPush.userId`, `HightouchPush.anonymousId`, `HightouchPush.fcmToken`.
 
 ## Notification permission (Android 13+)
