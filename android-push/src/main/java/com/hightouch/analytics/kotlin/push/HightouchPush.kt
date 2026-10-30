@@ -14,8 +14,10 @@ import com.hightouch.analytics.kotlin.push.internal.CustomDataJson
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.android.Analytics as AndroidAnalytics
 import com.hightouch.analytics.kotlin.core.Analytics
+import com.hightouch.analytics.kotlin.core.emptyJsonObject
 import com.hightouch.analytics.kotlin.core.platform.EnrichmentClosure
 import com.hightouch.analytics.kotlin.core.platform.plugins.setDeviceToken
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -269,9 +271,9 @@ object HightouchPush {
     }
 
     /**
-     * Identify the current user.
+     * Identify the current user, optionally recording [traits] about them.
      *
-     * Beyond `analytics.identify(userId)`, this:
+     * Beyond `analytics.identify(userId, traits)`, this:
      *  1. Re-fires the `"registered"` token event (if a token has already been delivered) so the
      *     token can be associated with the new user.
      *  2. Detects user-switch — if a different user was previously identified, calls [logout]
@@ -279,14 +281,15 @@ object HightouchPush {
      *     state (which generates a new anonymous id).
      */
     @JvmStatic
+    @JvmOverloads
     @Synchronized
-    fun identify(userId: String) {
+    fun identify(userId: String, traits: JsonObject = emptyJsonObject) {
         val current = _currentUserId
         if (current != null && current != userId) {
             logout()
         }
         _currentUserId = userId
-        analyticsOrError().identify(userId)
+        analyticsOrError().identify(userId, traits)
         // Re-fire the token event so the new user shows up on the registration. When the user is
         // unchanged (e.g. an app that identifies on every launch), go through the heartbeat gate
         // instead so repeat identifies don't emit duplicate "registered" events.
