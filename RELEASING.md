@@ -31,8 +31,8 @@ version — the git tag — so we version the whole library in lockstep.
    `VERSION_NAME`:
 
    ```bash
-   git tag 0.0.1
-   git push <public-remote> 0.0.1
+   git tag 0.0.2
+   git push <public-remote> 0.0.2
    ```
 
 4. **Verify the build** at <https://jitpack.io/#ht-sdks/events-sdk-kotlin/>: refresh until
@@ -47,11 +47,11 @@ repositories { maven { url 'https://jitpack.io' } }
 
 dependencies {
     // Android + push notifications:
-    implementation 'com.github.ht-sdks.events-sdk-kotlin:android-push:0.0.1'
+    implementation 'com.github.ht-sdks.events-sdk-kotlin:android-push:0.0.2'
     // …or Android without FCM push:
-    implementation 'com.github.ht-sdks.events-sdk-kotlin:android:0.0.1'
+    implementation 'com.github.ht-sdks.events-sdk-kotlin:android:0.0.2'
     // …or pure JVM:
-    implementation 'com.github.ht-sdks.events-sdk-kotlin:core:0.0.1'
+    implementation 'com.github.ht-sdks.events-sdk-kotlin:core:0.0.2'
 }
 ```
 

@@ -14,11 +14,11 @@ repositories { maven { url 'https://jitpack.io' } }
 
 dependencies {
     // Android + push notifications:
-    implementation 'com.github.ht-sdks.events-sdk-kotlin:android-push:0.0.1'
+    implementation 'com.github.ht-sdks.events-sdk-kotlin:android-push:0.0.2'
     // …or Android without FCM push:
-    implementation 'com.github.ht-sdks.events-sdk-kotlin:android:0.0.1'
+    implementation 'com.github.ht-sdks.events-sdk-kotlin:android:0.0.2'
     // …or pure JVM:
-    implementation 'com.github.ht-sdks.events-sdk-kotlin:core:0.0.1'
+    implementation 'com.github.ht-sdks.events-sdk-kotlin:core:0.0.2'
 }
 ```
 
