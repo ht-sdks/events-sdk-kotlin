@@ -27,6 +27,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /** Mirrors iOS `HightouchMessages_Facade_Tests` and `HightouchMessagesForegroundSync_Tests`. */
@@ -136,6 +137,32 @@ class HightouchMessagesFacadeTest {
         val messages = runBlocking { HightouchMessages.loadMessages(HightouchMessageQuery(locationId = "home")) }
 
         assertEquals(listOf("m1"), messages.map { it.messageId })
+    }
+
+    // loadMessages identity
+
+    @Test
+    fun `loadMessages refetches when the user changes before delivery`() {
+        val file = storeFile()
+        seed(listOf(makeMessage("alice_msg")), aliceOwner, file)
+        seed(listOf(makeMessage("bob_msg")), MessageOwner(MessageOwner.Kind.USER_ID, "bob"), file)
+        val analytics = initializeFacade(file, userId = "alice")
+        HightouchPush.initialize(analytics, com.hightouch.analytics.kotlin.push.HightouchPushConfig.Builder("app").build())
+        HightouchPush.identify("alice")
+        settle()
+
+        var delivered: List<String>? = null
+        HightouchMessages.loadMessages(HightouchMessageQuery()) { messages -> delivered = messages.map { it.messageId } }
+        // Wait, without running the main looper, until alice's read has finished and its delivery is queued.
+        val main = shadowOf(Looper.getMainLooper())
+        val deadline = System.currentTimeMillis() + 5_000
+        while (main.isIdle && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        assertFalse("precondition: the delivery is queued on main", main.isIdle)
+        assertNull(delivered)
+        HightouchPush.identify("bob")
+
+        assertTrue(awaitMain { delivered != null })
+        assertEquals("a result read for the previous user must not be delivered", listOf("bob_msg"), delivered)
     }
 
     // initialize idempotency

@@ -181,7 +181,7 @@ object HightouchMessages {
      * right after `identify` would otherwise resolve the previous owner.
      */
     private fun resolveOwner(analytics: Analytics): MessageOwner? {
-        val pushUserId = HightouchPush.userId?.trim()
+        val pushUserId = HightouchPush.userId
         if (!pushUserId.isNullOrEmpty()) return MessageOwner(MessageOwner.Kind.USER_ID, pushUserId)
         return MessageOwner.current(analytics)
     }
@@ -195,6 +195,9 @@ object HightouchMessages {
             Thread.currentThread().interrupt()
         }
     }
+
+    /** Unlike [currentStoreAndOwner], doesn't wait for the store to open. */
+    private fun currentOwner(): MessageOwner? = synchronized(stateLock) { analytics }?.let(::resolveOwner)
 
     /** Blocks until a pending [initialize] has opened the store. */
     private fun currentStoreAndOwner(): Pair<MessageStore, MessageOwner>? {
@@ -220,13 +223,16 @@ object HightouchMessages {
     @JvmStatic
     fun messages(query: HightouchMessageQuery): List<HightouchMessage> {
         val (store, owner) = currentStoreAndOwner() ?: return emptyList()
-        return try {
+        return messages(store, query, owner)
+    }
+
+    private fun messages(store: MessageStore, query: HightouchMessageQuery, owner: MessageOwner): List<HightouchMessage> =
+        try {
             store.messages(query, owner)
         } catch (e: Exception) {
             reportError(e)
             emptyList()
         }
-    }
 
     @JvmStatic
     @JvmOverloads
@@ -264,19 +270,36 @@ object HightouchMessages {
 
     /**
      * Same as [messages], but fetches off the calling thread and calls [callback] on the main
-     * thread.
+     * thread. If the user changes before the result is delivered, it's fetched again for the new
+     * user.
      */
     @JvmStatic
     fun loadMessages(query: HightouchMessageQuery, callback: (List<HightouchMessage>) -> Unit) {
         ioScope.launch {
-            val result = messages(query)
-            MessagesMainThread.post { callback(result) }
+            val (store, owner) = currentStoreAndOwner() ?: return@launch MessagesMainThread.post { callback(emptyList()) }
+            val result = messages(store, query, owner)
+            MessagesMainThread.post {
+                if (currentOwner() != owner) {
+                    loadMessages(query, callback)
+                    return@post
+                }
+                callback(result)
+            }
         }
     }
 
-    /** `suspend` counterpart to [loadMessages]; the read runs on [Dispatchers.IO]. */
-    suspend fun loadMessages(query: HightouchMessageQuery): List<HightouchMessage> =
-        withContext(Dispatchers.IO) { messages(query) }
+    /**
+     * `suspend` counterpart to [loadMessages]; the read runs on [Dispatchers.IO]. If the user
+     * changes before the result is returned, it's fetched again for the new user.
+     */
+    suspend fun loadMessages(query: HightouchMessageQuery): List<HightouchMessage> {
+        while (true) {
+            val read = withContext(Dispatchers.IO) {
+                currentStoreAndOwner()?.let { (store, owner) -> messages(store, query, owner) to owner }
+            } ?: return emptyList()
+            if (currentOwner() == read.second) return read.first
+        }
+    }
 
     // endregion
 
@@ -295,28 +318,6 @@ object HightouchMessages {
         ioScope.launch {
             val removedIds = try {
                 store.deleteAll(owner)
-            } catch (e: Exception) {
-                reportError(e)
-                emptyList()
-            }
-            if (removedIds.isNotEmpty()) notifyChange(HightouchMessagesChange(removedIds = removedIds))
-            completeOnMain(completion, removedIds.size)
-        }
-    }
-
-    /**
-     * Like [clearCachedMessages], but for every user that has synced on this device. Intended for
-     * debug tooling.
-     */
-    @JvmStatic
-    @JvmOverloads
-    fun clearAllCachedMessagesForAllUsers(completion: ((Int) -> Unit)? = null) {
-        awaitSetup()
-        val store = synchronized(stateLock) { store } ?: return completeOnMain(completion, 0)
-        dismissalLog()?.clear()
-        ioScope.launch {
-            val removedIds = try {
-                store.deleteAllOwners()
             } catch (e: Exception) {
                 reportError(e)
                 emptyList()

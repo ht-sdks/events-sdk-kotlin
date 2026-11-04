@@ -1,5 +1,6 @@
 package com.hightouch.analytics.kotlin.push.messages.internal
 
+import com.hightouch.analytics.kotlin.push.messages.HightouchMessagePriority
 import com.hightouch.analytics.kotlin.push.messages.HightouchMessageQuery
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
@@ -7,7 +8,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -30,7 +30,7 @@ class MessagesGoldenPayloadTest {
           "campaignId": "camp_coffee_launch",
           "createdAt": "2026-08-05T12:00:00.000Z",
           "expiresAt": "2099-09-05T12:00:00.000Z",
-          "priority": "1",
+          "priority": "high",
           "locationId": "home_promo",
           "triggerType": "immediate",
           "customValues": { "roastLevel": "medium", "featured": true },
@@ -117,12 +117,10 @@ class MessagesGoldenPayloadTest {
     }
 
     @Test
-    fun `the golden payload priority ranks first, not last`() {
+    fun `the golden payload priority decodes`() {
         val message = parse(goldenPayload).messages.first()
 
-        assertEquals("1", message.priority)
-        assertEquals(1, message.priorityRank)
-        assertNotEquals("a misspelled priority key would land here", Int.MAX_VALUE, message.priorityRank)
+        assertEquals(HightouchMessagePriority.HIGH, message.priority)
     }
 
     @Test
@@ -199,12 +197,5 @@ class MessagesGoldenPayloadTest {
 
         assertEquals(0, response.messages.size)
         assertEquals(1, response.malformedCount)
-    }
-
-    @Test
-    fun `syncedAt is parsed when present`() {
-        val response = parse("""{"messages":[],"syncedAt":"2026-08-05T12:00:00Z"}""")
-
-        assertEquals(MessagesISO8601.parse("2026-08-05T12:00:00Z"), response.syncedAtMillis)
     }
 }

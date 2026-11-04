@@ -279,31 +279,9 @@ class MessagesReadAndDismissTest {
     }
 
     @Test
-    fun `clearAllCachedMessagesForAllUsers removes every owner and every dismissal`() {
-        seed(listOf(message("alice_msg")))
-        val store = seed(listOf(message("bob_msg")), bob)
-        initializeFacade()
-        HightouchMessages.removeDismissed("alice_msg")
-        assertTrue(awaitMain { HightouchMessages.messageCount() == 0 })
-
-        var removed = -1
-        HightouchMessages.clearAllCachedMessagesForAllUsers { removed = it }
-        assertTrue(awaitMain { removed >= 0 })
-
-        assertEquals(1, removed)
-        assertEquals(emptyList<String>(), store.ids(bob))
-        assertEquals(emptySet<String>(), HightouchMessages.dismissedIds(alice))
-    }
-
-    @Test
     fun `clear before initialize completes with zero and does not crash`() {
         var removed = -1
         HightouchMessages.clearCachedMessages { removed = it }
-        assertTrue(awaitMain { removed >= 0 })
-        assertEquals(0, removed)
-
-        removed = -1
-        HightouchMessages.clearAllCachedMessagesForAllUsers { removed = it }
         assertTrue(awaitMain { removed >= 0 })
         assertEquals(0, removed)
     }
