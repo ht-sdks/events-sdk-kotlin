@@ -340,7 +340,7 @@ object HightouchMessages {
 
     /**
      * Removes cached messages for the current user by id, with one change notification. [completion]
-     * runs on the main thread with the number removed. Used by delete commands from the server.
+     * runs on the main thread with the number removed.
      */
     internal fun deleteMessages(messageIds: List<String>, completion: ((Int) -> Unit)? = null) {
         val (store, owner) = currentStoreAndOwner() ?: return completeOnMain(completion, 0)

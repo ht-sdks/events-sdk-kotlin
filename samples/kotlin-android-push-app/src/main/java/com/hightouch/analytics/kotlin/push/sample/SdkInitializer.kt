@@ -9,6 +9,10 @@ import com.hightouch.analytics.kotlin.push.HightouchCustomActionHandler
 import com.hightouch.analytics.kotlin.push.HightouchPush
 import com.hightouch.analytics.kotlin.push.HightouchPushConfig
 import com.hightouch.analytics.kotlin.push.HightouchUrlHandler
+import com.hightouch.analytics.kotlin.push.messages.HightouchMessages
+import com.hightouch.analytics.kotlin.push.messages.HightouchMessagesChange
+import com.hightouch.analytics.kotlin.push.messages.HightouchMessagesConfig
+import com.hightouch.analytics.kotlin.push.messages.HightouchMessagesListener
 import com.hightouch.analytics.kotlin.android.Analytics
 
 /**
@@ -44,6 +48,7 @@ internal object SdkInitializer {
                 SilentPushStore.append(appContext, customData)
             }
             .setAllowedProtocols(listOf("hightouchsample"))
+            .setMessages(HightouchMessagesConfig.Builder().setListener(SampleMessagesListener).build())
             // Small icon is declared in AndroidManifest.xml via the meta-data
             // `com.hightouch.push.default_notification_icon`. That's the recommended pattern;
             // setSmallIconResId(...) on the Builder is available as a programmatic alternative.
@@ -64,6 +69,18 @@ internal object SdkInitializer {
         }
         Log.i(TAG, "SDK initialized (apiHostOverride=${apiHost != null})")
         return true
+    }
+
+    /** Held by this object because the SDK keeps only a weak reference to its listener. */
+    private object SampleMessagesListener : HightouchMessagesListener {
+        override fun onMessagesChanged(change: HightouchMessagesChange) {
+            Log.i(
+                TAG,
+                "messages changed: inserted=${change.insertedIds} updated=${change.updatedIds} " +
+                    "removed=${change.removedIds}",
+            )
+            Log.i(TAG, "cached messages now: ${HightouchMessages.messageCount()}")
+        }
     }
 
     private object SampleUrlHandler : HightouchUrlHandler {

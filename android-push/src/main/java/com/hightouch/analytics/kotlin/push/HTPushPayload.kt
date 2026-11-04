@@ -131,6 +131,15 @@ internal data class HTPushPayload(
         const val GROUP_KEY = "groupKey"
         const val NOTIFICATION_TAG = "notificationTag"
         const val SOUND = "sound"
+
+        // Ghost-push command
+        const val COMMAND = "command"
+        const val VERB = "verb"
+        const val REASON = "reason"
+        const val MESSAGE_IDS = "messageIds"
+        const val LOCATION_IDS = "locationIds"
+        const val SYNC_TOKEN = "syncToken"
+
         const val IDENTIFIER = "identifier"
         const val TITLE = "title"
         const val ACTION = "action"

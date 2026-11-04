@@ -1,6 +1,6 @@
 # Sample FCM Payloads
 
-Six ready-to-curl payloads exercising every feature of the SDK. All use
+Eight ready-to-curl payloads exercising every feature of the SDK. All use
 [FCM HTTP v1](https://firebase.google.com/docs/cloud-messaging/migrate-v1) — substitute
 `${FCM_OAUTH_TOKEN}`, `${FCM_PROJECT_ID}`, and the device's FCM `token` before sending. Get the
 token from the Status screen in the test app (or `adb logcat` filter `HightouchPushSample`).
@@ -26,6 +26,7 @@ curl -X POST \
 | `04-action-buttons.json` | Two action buttons (one `openApp=true`, one `openApp=false`). Verifies buttons render, the second routes via the broadcast receiver without launching the activity. |
 | `05-rich-media.json` | `attachmentUrl` set to a public image. Verifies BigPictureStyle + that text-only fallback works if the image fetch fails. |
 | `06-allowed-scheme.json` | `defaultAction.type=openUrl` with a custom scheme. Requires `allowedProtocols=["hightouchsample"]` in the config (the sample app sets this). |
+| `07-ghost-sync.json` | `command.verb=syncMessages` (no notification). Verifies the SDK force-syncs embedded messages and tracks a `delivered` event. Needs a signed-in user: anonymous users never sync. |
 
 The payloads assume the test app is registered at applicationId
 `com.hightouch.analytics.kotlin.push.sample`.
