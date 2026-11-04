@@ -5,7 +5,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.hightouch.analytics.kotlin.core.Analytics
 import com.hightouch.analytics.kotlin.push.HightouchPush
 import com.hightouch.analytics.kotlin.push.HightouchPushConfig
-import com.hightouch.analytics.kotlin.push.HightouchSilentPushListener
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.push.messages.HightouchSyncOutcome
 import com.hightouch.analytics.kotlin.push.messages.messagesAnalytics
@@ -37,20 +36,15 @@ class HightouchMessagesTriggerTest {
 
     private lateinit var context: Context
     private lateinit var analytics: Analytics
-    private val customDataReceived = CopyOnWriteArrayList<Map<String, String>>()
+    private val errors = CopyOnWriteArrayList<Throwable>()
 
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         PushPreferences(context).clear()
         HightouchPush.resetForTesting()
-        analytics = messagesAnalytics(context)
-        HightouchPush.initialize(
-            analytics,
-            HightouchPushConfig.Builder("trigger-test-app")
-                .setSilentPushListener(HightouchSilentPushListener { customDataReceived.add(it) })
-                .build(),
-        )
+        analytics = messagesAnalytics(context, errors = errors)
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("trigger-test-app").build())
     }
 
     @After
@@ -62,11 +56,6 @@ class HightouchMessagesTriggerTest {
     private fun syncCommand(extra: String = "") =
         HTMessageCommand.parse(mapOf("hightouch" to """{"messageId":"push-1","command":{"verb":"syncMessages"$extra}}"""))!!
 
-    private fun deleteCommand(operand: String? = "msg_abc"): HTMessageCommand {
-        val field = operand?.let { ""","messageId":"$it"""" } ?: ""
-        return HTMessageCommand.parse(mapOf("hightouch" to """{"command":{"verb":"deleteMessage"$field}}"""))!!
-    }
-
     private fun deliveredEvents(): List<JsonObject> {
         val captured = CopyOnWriteArrayList<JsonObject>()
         verify(atLeast = 0) { analytics.track("CEP Engagement Events", capture(captured), any()) }
@@ -75,16 +64,13 @@ class HightouchMessagesTriggerTest {
 
     private fun run(
         command: HTMessageCommand,
-        data: Map<String, String> = emptyMap(),
         deadlineMillis: Long = 5_000,
         isInitialized: () -> Boolean = { true },
+        messagesEnabled: () -> Boolean = { true },
         sync: (HTMessageCommand, (HightouchSyncOutcome) -> Unit) -> Unit = { _, cb -> cb(HightouchSyncOutcome.Unchanged) },
-        deleteMessage: (String, (Boolean) -> Unit) -> Unit = { _, cb -> cb(false) },
     ): List<HightouchMessagesTrigger.Result> {
         val results = CopyOnWriteArrayList<HightouchMessagesTrigger.Result>()
-        HightouchMessagesTrigger.handle(
-            command, data, { results.add(it) }, isInitialized, deadlineMillis, sync, deleteMessage,
-        )
+        HightouchMessagesTrigger.handle(command, { results.add(it) }, isInitialized, messagesEnabled, deadlineMillis, sync)
         return results
     }
 
@@ -115,10 +101,10 @@ class HightouchMessagesTriggerTest {
     fun `delivered is tracked and flushed before the completion`() {
         var flushedBeforeCompletion = false
         HightouchMessagesTrigger.handle(
-            syncCommand(), emptyMap(),
+            syncCommand(),
             { flushedBeforeCompletion = runCatching { verify(exactly = 1) { analytics.flush() } }.isSuccess },
-            { true }, 5_000,
-            { _, cb -> cb(HightouchSyncOutcome.Unchanged) }, { _, cb -> cb(false) },
+            { true }, { true }, 5_000,
+            { _, cb -> cb(HightouchSyncOutcome.Unchanged) },
         )
 
         verifyOrder {
@@ -174,17 +160,6 @@ class HightouchMessagesTriggerTest {
     }
 
     @Test
-    fun `command and customData are both handled with one completion`() {
-        val data = mapOf(
-            "hightouch" to """{"messageId":"push-1","command":{"verb":"syncMessages"},"customData":{"foo":"bar"}}""",
-        )
-        val results = run(syncCommand(), data = data)
-
-        assertEquals(1, results.size)
-        assertEquals(listOf(mapOf("foo" to "bar")), customDataReceived.toList())
-    }
-
-    @Test
     fun `not initialized ignores the command without doing any work`() {
         var syncCalled = false
         val results = run(
@@ -199,30 +174,17 @@ class HightouchMessagesTriggerTest {
     }
 
     @Test
-    fun `deleteMessage that removes a row completes new data`() {
-        val deleted = CopyOnWriteArrayList<String>()
-        val results = run(deleteCommand("msg_abc"), deleteMessage = { id, cb -> deleted.add(id); cb(true) })
-
-        assertEquals(listOf(HightouchMessagesTrigger.Result.NEW_DATA), results)
-        assertEquals(listOf("msg_abc"), deleted.toList())
-        assertEquals(1, deliveredEvents().single()["message_count"]?.jsonPrimitive?.int)
-        assertEquals("deleteMessage", deliveredEvents().single()["sync_reason"]?.jsonPrimitive?.content)
-    }
-
-    @Test
-    fun `deleteMessage for an unknown id completes no data`() {
-        val results = run(deleteCommand("gone"), deleteMessage = { _, cb -> cb(false) })
+    fun `messages not enabled reports an error and does no work`() {
+        var syncCalled = false
+        val results = run(
+            syncCommand(),
+            messagesEnabled = { false },
+            sync = { _, cb -> syncCalled = true; cb(HightouchSyncOutcome.Changed(1)) },
+        )
 
         assertEquals(listOf(HightouchMessagesTrigger.Result.NO_DATA), results)
-    }
-
-    @Test
-    fun `deleteMessage without an operand completes no data and deletes nothing`() {
-        var called = false
-        val results = run(deleteCommand(null), deleteMessage = { _, cb -> called = true; cb(true) })
-
-        assertEquals(listOf(HightouchMessagesTrigger.Result.NO_DATA), results)
-        assertFalse(called)
-        assertEquals("delivered is still tracked", 1, deliveredEvents().size)
+        assertFalse(syncCalled)
+        assertEquals(listOf("syncMessages"), errors.mapNotNull { (it as? MessagesNotEnabledError)?.verb })
+        assertTrue("a command for a feature the app hasn't enabled is not tracked", deliveredEvents().isEmpty())
     }
 }

@@ -49,9 +49,10 @@ class HightouchFirebaseMessagingService : FirebaseMessagingService() {
         /**
          * Forward an FCM message to the Hightouch SDK.
          *
-         * A push carrying a `hightouch.command` (message sync or delete) is executed here and never
-         * displays a notification. It blocks FCM's message thread for up to
-         * [HightouchMessagesTrigger.SELF_IMPOSED_DEADLINE_MILLIS] while the command runs.
+         * A push carrying a `hightouch.command` (a message sync) is executed here and never displays
+         * a notification; the server never sends `customData` with a command. It blocks FCM's
+         * message thread for up to [HightouchMessagesTrigger.SELF_IMPOSED_DEADLINE_MILLIS] while the
+         * command runs.
          *
          * @return `true` if the message was a Hightouch push (the SDK claimed it); `false` if
          *   not — in which case the calling [FirebaseMessagingService] is expected to keep
@@ -63,7 +64,7 @@ class HightouchFirebaseMessagingService : FirebaseMessagingService() {
             // which a command-only push may omit. A push with an unrecognized verb falls through.
             val command = HTMessageCommand.parse(remoteMessage.data)
             if (command != null) {
-                HightouchMessagesTrigger.handle(command, remoteMessage.data)
+                HightouchMessagesTrigger.handle(command)
                 return true
             }
             return HightouchNotificationPresenter.handle(context, remoteMessage)

@@ -1,8 +1,0 @@
-{
-  "message": {
-    "token": "REPLACE_WITH_DEVICE_TOKEN",
-    "data": {
-      "hightouch": "{\"messageId\":\"sample-008\",\"command\":{\"verb\":\"deleteMessage\",\"messageId\":\"msg_abc\"}}"
-    }
-  }
-}

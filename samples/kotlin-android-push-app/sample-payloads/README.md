@@ -27,7 +27,6 @@ curl -X POST \
 | `05-rich-media.json` | `attachmentUrl` set to a public image. Verifies BigPictureStyle + that text-only fallback works if the image fetch fails. |
 | `06-allowed-scheme.json` | `defaultAction.type=openUrl` with a custom scheme. Requires `allowedProtocols=["hightouchsample"]` in the config (the sample app sets this). |
 | `07-ghost-sync.json` | `command.verb=syncMessages` (no notification). Verifies the SDK force-syncs embedded messages and tracks a `delivered` event. Needs a signed-in user: anonymous users never sync. |
-| `08-ghost-delete.json` | `command.verb=deleteMessage` with `messageId` `msg_abc`. Verifies that cached message is removed (replace the id with one in the local cache). |
 
 The payloads assume the test app is registered at applicationId
 `com.hightouch.analytics.kotlin.push.sample`.

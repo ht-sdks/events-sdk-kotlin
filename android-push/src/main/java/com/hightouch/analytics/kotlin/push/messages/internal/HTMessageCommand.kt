@@ -20,8 +20,6 @@ import kotlinx.serialization.json.contentOrNull
  */
 internal data class HTMessageCommand(
     val verb: Verb,
-    /** Operand for [Verb.DELETE_MESSAGE]; unused by [Verb.SYNC_MESSAGES]. */
-    val messageId: String?,
     /** `hightouch.messageId`, used only to attribute the `delivered` event. */
     val pushMessageId: String?,
     // Advisory only: logged on the `delivered` event, never used to decide what is stored or to
@@ -33,10 +31,12 @@ internal data class HTMessageCommand(
     val messageContext: JsonObject?,
 ) {
 
-    /** Unrecognized verbs fail [parse], so older SDKs ignore verbs added later. */
+    /**
+     * Unrecognized verbs fail [parse], so older SDKs ignore verbs added later. The server sends
+     * every inbox change, removals included, as [SYNC_MESSAGES].
+     */
     enum class Verb(val wireValue: String) {
-        SYNC_MESSAGES("syncMessages"),
-        DELETE_MESSAGE("deleteMessage");
+        SYNC_MESSAGES("syncMessages");
 
         companion object {
             fun fromWire(value: String): Verb? = values().firstOrNull { it.wireValue == value }
@@ -62,7 +62,6 @@ internal data class HTMessageCommand(
 
             return HTMessageCommand(
                 verb = verb,
-                messageId = command[Keys.MESSAGE_ID].stringOrNull(),
                 pushMessageId = root[Keys.MESSAGE_ID].stringOrNull(),
                 reason = command[Keys.REASON].stringOrNull(),
                 messageIds = command[Keys.MESSAGE_IDS].stringListOrNull(),
