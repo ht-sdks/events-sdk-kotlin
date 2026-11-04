@@ -88,24 +88,25 @@ class MessageStoreQueryTest {
                 makeMessage("high_old", priority = "high", createdAtMillis = T0),
                 makeMessage("low_new", priority = "low", createdAtMillis = T0 + 5000),
                 makeMessage("high_new", priority = "high", createdAtMillis = T0 + 5000),
+                makeMessage("default_newest", createdAtMillis = T0 + 10_000),
             ),
             alice,
         )
 
         assertEquals(
-            listOf("high_new", "high_old", "low_new", "low_old"),
+            listOf("high_new", "high_old", "low_new", "low_old", "default_newest"),
             ids(HightouchMessageQuery(sort = HightouchMessageSort.PRIORITY_THEN_NEWEST)),
         )
         assertEquals(
-            listOf("high_old", "high_new", "low_old", "low_new"),
+            listOf("high_old", "high_new", "low_old", "low_new", "default_newest"),
             ids(HightouchMessageQuery(sort = HightouchMessageSort.PRIORITY_THEN_OLDEST)),
         )
         assertEquals(
-            listOf("high_new", "low_new", "high_old", "low_old"),
+            listOf("default_newest", "high_new", "low_new", "high_old", "low_old"),
             ids(HightouchMessageQuery(sort = HightouchMessageSort.NEWEST_FIRST)),
         )
         assertEquals(
-            listOf("high_old", "low_old", "high_new", "low_new"),
+            listOf("high_old", "low_old", "high_new", "low_new", "default_newest"),
             ids(HightouchMessageQuery(sort = HightouchMessageSort.OLDEST_FIRST)),
         )
     }
@@ -176,7 +177,7 @@ class MessageStoreQueryTest {
     fun `rows whose payload cannot be decoded are skipped`() {
         store.replaceAll(listOf(makeMessage("good")), alice)
         store.database.execSQL(
-            "INSERT INTO messages (messageId, ownerKey, payload, insertedAt, updatedAt) VALUES ('bad', ?, x'7B', 0, 0)",
+            "INSERT INTO messages (messageId, ownerKey, payload, insertedAt) VALUES ('bad', ?, x'7B', 0)",
             arrayOf(alice.storageKey),
         )
         assertEquals(listOf("good"), ids(HightouchMessageQuery()))

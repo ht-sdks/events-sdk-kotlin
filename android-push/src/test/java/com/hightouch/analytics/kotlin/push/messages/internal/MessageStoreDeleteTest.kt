@@ -79,16 +79,6 @@ class MessageStoreDeleteTest {
     }
 
     @Test
-    fun `deleteAllOwners clears every owner`() {
-        store.replaceAll(listOf(makeMessage("a1")), alice)
-        store.replaceAll(listOf(makeMessage("b1")), bob)
-
-        assertEquals(setOf("a1", "b1"), store.deleteAllOwners().toSet())
-        assertEquals(0, store.totalCount())
-        assertEquals(emptyList<String>(), store.deleteAllOwners())
-    }
-
-    @Test
     fun `a message can be re-inserted after it was deleted`() {
         store.replaceAll(listOf(makeMessage("m1", campaignId = "old")), alice)
         store.delete("m1", alice)

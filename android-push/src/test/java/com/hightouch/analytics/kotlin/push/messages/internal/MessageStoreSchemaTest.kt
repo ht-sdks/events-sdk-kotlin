@@ -43,21 +43,16 @@ class MessageStoreSchemaTest {
             "CREATE TABLE messages (" +
                 "messageId TEXT NOT NULL, " +
                 "ownerKey TEXT NOT NULL, " +
-                "ownerUserId TEXT, " +
-                "ownerAnonymousId TEXT, " +
-                "messageType TEXT NOT NULL DEFAULT '', " +
+                "messageType TEXT, " +
                 "campaignId TEXT, " +
                 "createdAt INTEGER, " +
                 "expiresAt INTEGER, " +
-                "priority TEXT, " +
                 "priorityRank INTEGER NOT NULL DEFAULT 2147483647, " +
                 "locationId TEXT, " +
                 "variantSlug TEXT, " +
-                "triggerType TEXT, " +
                 "messageVersion TEXT, " +
                 "payload BLOB NOT NULL, " +
                 "insertedAt INTEGER NOT NULL, " +
-                "updatedAt INTEGER NOT NULL, " +
                 "PRIMARY KEY (ownerKey, messageId))",
             MessageStoreSchema.CREATE_TABLE,
         )
@@ -96,7 +91,7 @@ class MessageStoreSchemaTest {
     @Test
     fun `composite primary key rejects a duplicate message id for one owner`() {
         fun insert(ownerKey: String) = store.database.execSQL(
-            "INSERT INTO messages (messageId, ownerKey, payload, insertedAt, updatedAt) VALUES ('dup', ?, x'01', 0, 0)",
+            "INSERT INTO messages (messageId, ownerKey, payload, insertedAt) VALUES ('dup', ?, x'01', 0)",
             arrayOf(ownerKey),
         )
         insert("u:alice")
@@ -113,11 +108,11 @@ class MessageStoreSchemaTest {
     @Test
     fun `defaults apply when optional projection columns are omitted`() {
         store.database.execSQL(
-            "INSERT INTO messages (messageId, ownerKey, payload, insertedAt, updatedAt) VALUES ('m', 'u:alice', x'01', 0, 0)",
+            "INSERT INTO messages (messageId, ownerKey, payload, insertedAt) VALUES ('m', 'u:alice', x'01', 0)",
         )
         store.database.rawQuery("SELECT messageType, priorityRank, expiresAt FROM messages", null).use {
             assertTrue(it.moveToFirst())
-            assertEquals("", it.getString(0))
+            assertTrue(it.isNull(0))
             assertEquals(Int.MAX_VALUE, it.getInt(1))
             assertTrue(it.isNull(2))
         }

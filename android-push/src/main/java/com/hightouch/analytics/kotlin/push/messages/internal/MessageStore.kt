@@ -28,13 +28,10 @@ internal data class UpsertOutcome(
  * thread-safe: mutations are serialized and each one is a single transaction, so a concurrent
  * read sees the state either before or after it, never a partial write. File-backed stores use
  * write-ahead logging, so reads do not wait for a writer.
- *
- * @param modelVersion Names the database file and is its SQLite `user_version`.
  */
 internal class MessageStore(
     context: Context,
     location: MessageStoreLocation = MessageStoreLocation.AppContainer,
-    val modelVersion: Int = MessageStoreSchema.MODEL_VERSION,
 ) {
     private val appContext = context.applicationContext ?: context
     private val writeLock = Any()
@@ -42,6 +39,8 @@ internal class MessageStore(
     private val db: SQLiteDatabase
 
     init {
+        // Names the database file and is its SQLite `user_version`.
+        val modelVersion = MessageStoreSchema.MODEL_VERSION
         val file = MessageStoreLocation.storeFile(location, appContext, modelVersion)
         val path = file?.absolutePath
         var opened = Helper(appContext, path, modelVersion)
@@ -295,17 +294,6 @@ internal class MessageStore(
         }
     }
 
-    /** Removes rows for every owner on the device and returns their ids. Debug tooling only. */
-    fun deleteAllOwners(): List<String> = synchronized(writeLock) {
-        db.inTransaction {
-            val ids = ArrayList<String>()
-            db.rawQuery("SELECT ${Col.MESSAGE_ID} FROM ${MessageStoreSchema.TABLE}", null)
-                .use { while (it.moveToNext()) ids.add(it.getString(0)) }
-            db.delete(MessageStoreSchema.TABLE, null, null)
-            ids
-        }
-    }
-
     // endregion
 
     // region Test hooks
@@ -314,20 +302,20 @@ internal class MessageStore(
     @VisibleForTesting
     internal fun totalCount(): Int = scalarInt("SELECT COUNT(*) FROM ${MessageStoreSchema.TABLE}", emptyArray())
 
-    /** `insertedAt`, `updatedAt` and `payload` of one row, or null if absent. */
+    /** `insertedAt` and `payload` of one row, or null if absent. */
     @VisibleForTesting
     internal fun rowSnapshot(messageId: String, owner: MessageOwner): RowSnapshot? =
         db.rawQuery(
-            "SELECT ${Col.INSERTED_AT}, ${Col.UPDATED_AT}, ${Col.PAYLOAD} FROM ${MessageStoreSchema.TABLE} " +
+            "SELECT ${Col.INSERTED_AT}, ${Col.PAYLOAD} FROM ${MessageStoreSchema.TABLE} " +
                 "WHERE ${Col.OWNER_KEY} = ? AND ${Col.MESSAGE_ID} = ?",
             arrayOf(owner.storageKey, messageId),
-        ).use { c -> if (c.moveToFirst()) RowSnapshot(c.getLong(0), c.getLong(1), c.getBlob(2)) else null }
+        ).use { c -> if (c.moveToFirst()) RowSnapshot(c.getLong(0), c.getBlob(1)) else null }
 
     /** The underlying database, for tests that assert on schema or write raw rows. */
     @get:VisibleForTesting
     internal val database: SQLiteDatabase get() = db
 
-    internal class RowSnapshot(val insertedAtMillis: Long, val updatedAtMillis: Long, val payload: ByteArray)
+    internal class RowSnapshot(val insertedAtMillis: Long, val payload: ByteArray)
 
     // endregion
 
@@ -369,20 +357,15 @@ internal class MessageStore(
     ) = ContentValues().apply {
         put(Col.MESSAGE_ID, message.messageId)
         put(Col.OWNER_KEY, owner.storageKey)
-        put(Col.OWNER_USER_ID, if (owner.kind == MessageOwner.Kind.USER_ID) owner.id else null)
-        put(Col.OWNER_ANONYMOUS_ID, if (owner.kind == MessageOwner.Kind.ANONYMOUS_ID) owner.id else null)
         put(Col.MESSAGE_TYPE, message.messageType)
         put(Col.CAMPAIGN_ID, message.campaignId)
         put(Col.CREATED_AT, message.createdAtMillis)
         put(Col.EXPIRES_AT, message.expiresAtMillis)
-        put(Col.PRIORITY, message.priority)
         put(Col.PRIORITY_RANK, message.priorityRank)
         put(Col.LOCATION_ID, message.locationId)
         put(Col.VARIANT_SLUG, message.variantSlug)
-        put(Col.TRIGGER_TYPE, message.triggerType)
         put(Col.MESSAGE_VERSION, message.version)
         put(Col.PAYLOAD, payload)
-        put(Col.UPDATED_AT, nowMillis)
         if (isNew) put(Col.INSERTED_AT, nowMillis)
     }
 

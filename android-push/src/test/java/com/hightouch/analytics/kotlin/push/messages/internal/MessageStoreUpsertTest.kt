@@ -3,7 +3,9 @@ package com.hightouch.analytics.kotlin.push.messages.internal
 import com.hightouch.analytics.kotlin.push.messages.HightouchMessage
 import kotlinx.serialization.json.Json
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -29,11 +31,10 @@ class MessageStoreUpsertTest {
     }
 
     @Test
-    fun `changed content advances updatedAt but keeps insertedAt`() {
+    fun `changed content rewrites payload but keeps insertedAt`() {
         store.replaceAll(listOf(makeMessage("m1", campaignId = "camp_1")), alice, nowMillis = T0)
         val first = store.rowSnapshot("m1", alice)!!
         assertEquals(T0, first.insertedAtMillis)
-        assertEquals(T0, first.updatedAtMillis)
 
         val outcome = store.replaceAll(listOf(makeMessage("m1", campaignId = "camp_2")), alice, nowMillis = T0 + 60_000)
         assertEquals(listOf("m1"), outcome.updatedIds)
@@ -41,20 +42,23 @@ class MessageStoreUpsertTest {
 
         val second = store.rowSnapshot("m1", alice)!!
         assertEquals("insertedAt must not move on an update", T0, second.insertedAtMillis)
-        assertEquals("updatedAt must advance on real content change", T0 + 60_000, second.updatedAtMillis)
+        assertFalse("payload must be rewritten on real content change", second.payload.contentEquals(first.payload))
         assertEquals("camp_2", store.message("m1", alice)!!.campaignId)
     }
 
     @Test
-    fun `byte-identical re-upsert reports unchanged and does not advance updatedAt`() {
+    fun `byte-identical re-upsert reports unchanged and keeps the row`() {
         val message = makeMessage("m1", campaignId = "camp_1")
         store.replaceAll(listOf(message), alice, nowMillis = T0)
+        val before = store.rowSnapshot("m1", alice)!!
         val outcome = store.replaceAll(listOf(message), alice, nowMillis = T0 + 60_000)
 
         assertEquals(1, outcome.unchanged)
         assertTrue(outcome.updatedIds.isEmpty())
         assertTrue(outcome.insertedIds.isEmpty())
-        assertEquals(T0, store.rowSnapshot("m1", alice)!!.updatedAtMillis)
+        val after = store.rowSnapshot("m1", alice)!!
+        assertEquals(before.insertedAtMillis, after.insertedAtMillis)
+        assertArrayEquals(before.payload, after.payload)
     }
 
     @Test
@@ -64,11 +68,12 @@ class MessageStoreUpsertTest {
         assertEquals(first, second)
 
         store.replaceAll(listOf(first), alice, nowMillis = T0)
+        val before = store.rowSnapshot("m1", alice)!!
         val outcome = store.replaceAll(listOf(second), alice, nowMillis = T0 + 60_000)
 
         assertEquals(1, outcome.unchanged)
         assertTrue(outcome.updatedIds.isEmpty())
-        assertEquals(T0, store.rowSnapshot("m1", alice)!!.updatedAtMillis)
+        assertArrayEquals(before.payload, store.rowSnapshot("m1", alice)!!.payload)
     }
 
     @Test
@@ -84,7 +89,7 @@ class MessageStoreUpsertTest {
 
         val outcome = store.replaceAll(listOf(message), alice, nowMillis = T0 + 1)
         assertEquals(1, outcome.unchanged)
-        assertEquals(T0, store.rowSnapshot("m1", alice)!!.updatedAtMillis)
+        assertArrayEquals("an unchanged row is not rewritten", reencoded, store.rowSnapshot("m1", alice)!!.payload)
     }
 
     @Test
@@ -183,6 +188,37 @@ class MessageStoreUpsertTest {
         assertEquals(setOf("high_new", "high_old"), outcome.insertedIds.toSet())
         assertEquals(listOf("high_new", "high_old"), store.ids(alice))
         assertEquals(2, store.totalCount())
+    }
+
+    @Test
+    fun `replaceAll limit keeps the highest priority newest messages`() {
+        val outcome = store.replaceAll(
+            listOf(
+                makeMessage("old_default", createdAtMillis = T0),
+                makeMessage("undated"),
+                makeMessage("new_default", createdAtMillis = T0 + 10_000),
+                makeMessage("old_high", priority = "high", createdAtMillis = T0),
+            ),
+            alice,
+            limit = 2,
+        )
+
+        assertEquals(setOf("old_high", "new_default"), outcome.insertedIds.toSet())
+        assertEquals(2, store.totalCount())
+    }
+
+    @Test
+    fun `replaceAll limit reports previously stored rows it drops as removed`() {
+        val older = makeMessage("older", createdAtMillis = T0)
+        val newer = makeMessage("newer", createdAtMillis = T0 + 10_000)
+        store.replaceAll(listOf(older), alice)
+
+        val outcome = store.replaceAll(listOf(older, newer), alice, limit = 1)
+        assertEquals(listOf("newer"), outcome.insertedIds)
+        assertEquals(listOf("older"), outcome.removedIds)
+
+        val repeated = store.replaceAll(listOf(older, newer), alice, limit = 1)
+        assertTrue("a capped set must converge, not churn", repeated.insertedIds.isEmpty() && repeated.removedIds.isEmpty())
     }
 
     @Test
