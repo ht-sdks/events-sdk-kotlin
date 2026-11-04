@@ -16,21 +16,16 @@ internal object MessageStoreSchema {
     object Col {
         const val MESSAGE_ID = "messageId"
         const val OWNER_KEY = "ownerKey"
-        const val OWNER_USER_ID = "ownerUserId"
-        const val OWNER_ANONYMOUS_ID = "ownerAnonymousId"
         const val MESSAGE_TYPE = "messageType"
         const val CAMPAIGN_ID = "campaignId"
         const val CREATED_AT = "createdAt"
         const val EXPIRES_AT = "expiresAt"
-        const val PRIORITY = "priority"
         const val PRIORITY_RANK = "priorityRank"
         const val LOCATION_ID = "locationId"
         const val VARIANT_SLUG = "variantSlug"
-        const val TRIGGER_TYPE = "triggerType"
         const val MESSAGE_VERSION = "messageVersion"
         const val PAYLOAD = "payload"
         const val INSERTED_AT = "insertedAt"
-        const val UPDATED_AT = "updatedAt"
     }
 
     /**
@@ -42,21 +37,16 @@ internal object MessageStoreSchema {
         "CREATE TABLE messages (" +
             "messageId TEXT NOT NULL, " +
             "ownerKey TEXT NOT NULL, " +
-            "ownerUserId TEXT, " +
-            "ownerAnonymousId TEXT, " +
-            "messageType TEXT NOT NULL DEFAULT '', " +
+            "messageType TEXT, " +
             "campaignId TEXT, " +
             "createdAt INTEGER, " +
             "expiresAt INTEGER, " +
-            "priority TEXT, " +
             "priorityRank INTEGER NOT NULL DEFAULT 2147483647, " +
             "locationId TEXT, " +
             "variantSlug TEXT, " +
-            "triggerType TEXT, " +
             "messageVersion TEXT, " +
             "payload BLOB NOT NULL, " +
             "insertedAt INTEGER NOT NULL, " +
-            "updatedAt INTEGER NOT NULL, " +
             "PRIMARY KEY (ownerKey, messageId))"
 
     val CREATE_INDEXES: List<String> = listOf(
