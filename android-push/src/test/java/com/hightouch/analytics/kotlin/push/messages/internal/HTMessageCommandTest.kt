@@ -66,22 +66,10 @@ class HTMessageCommandTest {
         assertNull(HTMessageCommand.parse(data("""{"command":{"verb":1}}""")))
     }
 
+    /** The server sends every inbox change, removals included, as `syncMessages`. */
     @Test
-    fun `deleteMessage operand is parsed`() {
-        val command = HTMessageCommand.parse(
-            data("""{"command":{"verb":"deleteMessage","messageId":"msg_abc"}}"""),
-        )
-
-        assertEquals(HTMessageCommand.Verb.DELETE_MESSAGE, command?.verb)
-        assertEquals("msg_abc", command?.messageId)
-    }
-
-    @Test
-    fun `syncMessages has no operand`() {
-        val command = HTMessageCommand.parse(data("""{"command":{"verb":"syncMessages"}}"""))
-
-        assertEquals(HTMessageCommand.Verb.SYNC_MESSAGES, command?.verb)
-        assertNull(command?.messageId)
+    fun `deleteMessage is not a recognized verb`() {
+        assertNull(HTMessageCommand.parse(data("""{"command":{"verb":"deleteMessage","messageId":"msg_abc"}}""")))
     }
 
     @Test

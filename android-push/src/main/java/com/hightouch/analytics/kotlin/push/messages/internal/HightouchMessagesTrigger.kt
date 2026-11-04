@@ -1,8 +1,8 @@
 package com.hightouch.analytics.kotlin.push.messages.internal
 
 import android.util.Log
+import com.hightouch.analytics.kotlin.core.reportInternalError
 import com.hightouch.analytics.kotlin.push.CepEventTracking
-import com.hightouch.analytics.kotlin.push.HTPushPayload
 import com.hightouch.analytics.kotlin.push.HightouchPush
 import com.hightouch.analytics.kotlin.push.messages.HightouchMessages
 import com.hightouch.analytics.kotlin.push.messages.HightouchSyncOutcome
@@ -15,6 +15,15 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+
+/**
+ * A ghost-push command arrived, but `HightouchPushConfig.messages` isn't set. The server only sends
+ * commands for in-app campaigns linked to this app, so this is a configuration mismatch.
+ */
+internal class MessagesNotEnabledError(val verb: String) : Exception(
+    "'$verb' command received, but embedded messages are not enabled. Set " +
+        "HightouchPushConfig.Builder.setMessages(...) before initialize().",
+)
 
 /**
  * Executes a ghost-push command inside FCM's `onMessageReceived` budget.
@@ -50,20 +59,16 @@ internal object HightouchMessagesTrigger {
      * Runs [command], then calls [completion] exactly once, on the calling thread, with the result.
      * A `delivered` event is tracked and flushed before it, whichever path finishes first.
      *
-     * `isInitialized`, `deadlineMillis`, `sync` and `deleteMessage` are test seams; `sync` and
-     * `deleteMessage` call back on any thread.
-     *
-     * @param data the FCM `data` map the command was parsed from, so a push carrying both a command
-     *   and `customData` still reaches the silent-push listener.
+     * `isInitialized`, `messagesEnabled`, `deadlineMillis` and `sync` are test seams; `sync` calls
+     * back on any thread.
      */
     fun handle(
         command: HTMessageCommand,
-        data: Map<String, String>,
         completion: (Result) -> Unit = {},
         isInitialized: () -> Boolean = { HightouchPush.isInitialized },
+        messagesEnabled: () -> Boolean = { HightouchMessages.isInitialized },
         deadlineMillis: Long = SELF_IMPOSED_DEADLINE_MILLIS,
         sync: (HTMessageCommand, (HightouchSyncOutcome) -> Unit) -> Unit = ::defaultSync,
-        deleteMessage: (String, (Boolean) -> Unit) -> Unit = HightouchMessages::deleteMessage,
     ) {
         val verb = command.verb.wireValue
 
@@ -78,12 +83,10 @@ internal object HightouchMessagesTrigger {
             return
         }
 
-        if (!HightouchMessages.isInitialized) {
-            Log.w(
-                TAG,
-                "'$verb' command received, but embedded messages are not enabled, so it will have " +
-                    "no effect. Set HightouchPushConfig.Builder.setMessages(...) before initialize().",
-            )
+        if (!messagesEnabled()) {
+            HightouchPush.cepAnalytics?.reportInternalError(MessagesNotEnabledError(verb))
+            completion(Result.NO_DATA)
+            return
         }
 
         val completer = TriggerCompletion(
@@ -94,7 +97,7 @@ internal object HightouchMessagesTrigger {
 
         val outcome = AtomicReference<Pair<Result, Int>>()
         val finished = CountDownLatch(1)
-        execute(command, sync, deleteMessage) { result, messageCount ->
+        execute(command, sync) { result, messageCount ->
             outcome.set(result to messageCount)
             finished.countDown()
         }
@@ -112,12 +115,10 @@ internal object HightouchMessagesTrigger {
         }
         if (inTime) {
             val (result, messageCount) = outcome.get()
-            deliverCustomData(data)
             completer.complete(result, messageCount)
         } else {
             Log.w(TAG, "'$verb' command did not finish within ${deadlineMillis}ms; reporting no data.")
             completer.complete(Result.NO_DATA, 0)
-            deliverCustomData(data)
         }
     }
 
@@ -128,7 +129,6 @@ internal object HightouchMessagesTrigger {
     private fun execute(
         command: HTMessageCommand,
         sync: (HTMessageCommand, (HightouchSyncOutcome) -> Unit) -> Unit,
-        deleteMessage: (String, (Boolean) -> Unit) -> Unit,
         onResult: (Result, Int) -> Unit,
     ) {
         when (command.verb) {
@@ -139,32 +139,6 @@ internal object HightouchMessagesTrigger {
                     is HightouchSyncOutcome.Failed -> onResult(Result.FAILED, 0)
                 }
             }
-
-            HTMessageCommand.Verb.DELETE_MESSAGE -> {
-                // NO_DATA for a missing operand: it isn't a failure of the command.
-                val messageId = command.messageId
-                if (messageId.isNullOrEmpty()) {
-                    onResult(Result.NO_DATA, 0)
-                } else {
-                    deleteMessage(messageId) { deleted ->
-                        if (deleted) onResult(Result.NEW_DATA, 1) else onResult(Result.NO_DATA, 0)
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * A push can carry both a command and `customData`; this path owns the command, so it also
-     * delivers the `customData` that the silent-push path would have.
-     */
-    private fun deliverCustomData(data: Map<String, String>) {
-        val customData = HTPushPayload.parse(data)?.customData?.takeIf { it.isNotEmpty() } ?: return
-        val listener = HightouchPush.cepSilentPushListener ?: return
-        try {
-            listener.onSilentPush(customData)
-        } catch (e: Exception) {
-            Log.e(TAG, "HightouchSilentPushListener threw while handling a command push", e)
         }
     }
 

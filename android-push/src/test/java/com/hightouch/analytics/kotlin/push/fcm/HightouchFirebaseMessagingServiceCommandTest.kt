@@ -9,6 +9,10 @@ import com.hightouch.analytics.kotlin.push.HightouchPush
 import com.hightouch.analytics.kotlin.push.HightouchPushConfig
 import com.hightouch.analytics.kotlin.push.HightouchSilentPushListener
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
+import com.hightouch.analytics.kotlin.push.messages.HightouchMessages
+import com.hightouch.analytics.kotlin.push.messages.HightouchMessagesConfig
+import com.hightouch.analytics.kotlin.push.messages.internal.MessageStoreLocation
+import com.hightouch.analytics.kotlin.push.messages.internal.MessagesNotEnabledError
 import com.hightouch.analytics.kotlin.push.messages.messagesAnalytics
 import io.mockk.verify
 import java.util.concurrent.CopyOnWriteArrayList
@@ -38,6 +42,7 @@ class HightouchFirebaseMessagingServiceCommandTest {
     private lateinit var context: Context
     private lateinit var analytics: Analytics
     private val customDataReceived = CopyOnWriteArrayList<Map<String, String>>()
+    private val errors = CopyOnWriteArrayList<Throwable>()
     private val fcmThread = Executors.newSingleThreadExecutor()
 
     @Before
@@ -45,23 +50,26 @@ class HightouchFirebaseMessagingServiceCommandTest {
         context = ApplicationProvider.getApplicationContext()
         PushPreferences(context).clear()
         HightouchPush.resetForTesting()
-        analytics = messagesAnalytics(context)
+        HightouchMessages.resetForTesting()
+        analytics = messagesAnalytics(context, errors = errors)
     }
 
     @After
     fun tearDown() {
         fcmThread.shutdownNow()
+        HightouchMessages.resetForTesting()
         HightouchPush.resetForTesting()
         PushPreferences(context).clear()
     }
 
-    private fun initialize() {
-        HightouchPush.initialize(
-            analytics,
-            HightouchPushConfig.Builder("command-test-app")
-                .setSilentPushListener(HightouchSilentPushListener { customDataReceived.add(it) })
-                .build(),
-        )
+    private fun initialize(messagesEnabled: Boolean = true) {
+        val config = HightouchPushConfig.Builder("command-test-app")
+            .setSilentPushListener(HightouchSilentPushListener { customDataReceived.add(it) })
+        if (messagesEnabled) {
+            HightouchMessages.testStoreLocation = MessageStoreLocation.Ephemeral
+            config.setMessages(HightouchMessagesConfig.Builder().setSyncOnLaunch(false).build())
+        }
+        HightouchPush.initialize(analytics, config.build())
     }
 
     private fun message(hightouchJson: String) =
@@ -124,16 +132,23 @@ class HightouchFirebaseMessagingServiceCommandTest {
     }
 
     @Test
-    fun `command and customData push is handled once and still delivers custom data`() {
-        initialize()
+    fun `command push with messages disabled is claimed, reports an error and does no work`() {
+        initialize(messagesEnabled = false)
 
-        val claimed = deliver(
-            """{"messageId":"m1","command":{"verb":"syncMessages"},"customData":{"foo":"bar"}}""",
-        )
+        val claimed = deliver("""{"command":{"verb":"syncMessages"}}""")
 
         assertTrue(claimed)
-        assertEquals(1, deliveredEvents().size)
-        assertEquals(listOf(mapOf("foo" to "bar")), customDataReceived.toList())
+        assertEquals(listOf("syncMessages"), errors.mapNotNull { (it as? MessagesNotEnabledError)?.verb })
+        assertTrue("a command for a feature the app hasn't enabled is not tracked", deliveredEvents().isEmpty())
+    }
+
+    @Test
+    fun `deleteMessage is not a command and falls through to the legacy path`() {
+        initialize()
+
+        deliver("""{"messageId":"m3","isSilent":true,"command":{"verb":"deleteMessage","messageId":"msg_abc"}}""")
+
+        assertTrue(deliveredEvents().isEmpty())
     }
 
     @Test
