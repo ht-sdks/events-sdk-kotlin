@@ -1,6 +1,7 @@
 package com.hightouch.analytics.kotlin.push.messages.internal
 
 import com.hightouch.analytics.kotlin.push.messages.HightouchMessage
+import com.hightouch.analytics.kotlin.push.messages.HightouchMessageQuery
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -108,7 +109,7 @@ class MessageStoreUpsertTest {
         val messages = (0 until 1000).map { makeMessage("msg_$it") }
         val outcome = store.replaceAll(messages, alice)
         assertEquals(1000, outcome.insertedIds.size)
-        assertEquals(1000, store.count(com.hightouch.analytics.kotlin.push.messages.HightouchMessageQuery(), alice))
+        assertEquals(1000, store.count(HightouchMessageQuery(), alice))
         for (boundary in listOf(0, 199, 200, 201, 399, 400, 999)) {
             assertNotNull("msg_$boundary should be present", store.message("msg_$boundary", alice))
         }
@@ -314,5 +315,47 @@ class MessageStoreUpsertTest {
 
         assertEquals(0, store.enforceLimit(1, preserving = alice))
         assertEquals(2, store.totalCount())
+    }
+
+    // reconcile
+
+    @Test
+    fun `reconcile reports the owner's rows that expired as removed`() {
+        val lapsing = makeMessage("lapsing", expiresAtMillis = T0 + 10_000)
+        store.replaceAll(listOf(lapsing, makeMessage("kept")), alice, nowMillis = T0)
+
+        val outcome = store.reconcile(
+            listOf(lapsing, makeMessage("kept"), makeMessage("arrived_expired", expiresAtMillis = T0)),
+            alice,
+            maxStoredMessages = 500,
+            nowMillis = T0 + 60_000,
+        )
+
+        assertEquals(listOf("lapsing"), outcome.removedIds)
+        assertTrue("a message already expired on arrival must not be inserted", outcome.insertedIds.isEmpty())
+        assertEquals(
+            listOf("kept"),
+            store.messages(HightouchMessageQuery(includeExpired = true), alice).map { it.messageId },
+        )
+    }
+
+    @Test
+    fun `reconcile prunes and evicts only other owners in the same write`() {
+        store.replaceAll(
+            listOf(makeMessage("bob_expired", expiresAtMillis = T0 - 1_000), makeMessage("bob_old"), makeMessage("bob_new")),
+            bob,
+            nowMillis = T0 - 100_000,
+        )
+
+        val outcome = store.reconcile(listOf(makeMessage("a1"), makeMessage("a2")), alice, maxStoredMessages = 3, nowMillis = T0)
+
+        assertEquals(setOf("a1", "a2"), outcome.insertedIds.toSet())
+        assertTrue("other owners' rows are never reported in this owner's change", outcome.removedIds.isEmpty())
+        assertEquals(3, store.totalCount())
+        assertEquals(
+            "bob's expired row is pruned and one more is evicted to fit the cap",
+            1,
+            store.messages(HightouchMessageQuery(includeExpired = true), bob).size,
+        )
     }
 }
