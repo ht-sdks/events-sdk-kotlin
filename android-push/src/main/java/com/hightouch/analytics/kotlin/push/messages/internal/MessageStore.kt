@@ -12,7 +12,7 @@ import com.hightouch.analytics.kotlin.push.messages.HightouchMessageSort
 import com.hightouch.analytics.kotlin.push.messages.internal.MessageStoreSchema.Col
 import java.io.File
 
-/** What changed as the result of one [MessageStore.replaceAll] call. */
+/** What changed as the result of one [MessageStore.replaceAll] or [MessageStore.reconcile] call. */
 internal data class UpsertOutcome(
     val insertedIds: List<String>,
     val updatedIds: List<String>,
@@ -142,6 +142,31 @@ internal class MessageStore(
     // region Upsert
 
     /**
+     * Applies a fetched server set for [owner] in one transaction: replaces [owner]'s rows (capped
+     * at [maxStoredMessages]), prunes expired rows, then evicts other owners' oldest rows until the
+     * store is under the cap. The outcome is every change to [owner]'s rows; messages already
+     * expired at [nowMillis] are dropped first, so their rows show up in `removedIds`.
+     *
+     * @param suppressing as in [replaceAll].
+     */
+    fun reconcile(
+        messages: List<HightouchMessage>,
+        owner: MessageOwner,
+        maxStoredMessages: Int,
+        nowMillis: Long = System.currentTimeMillis(),
+        suppressing: () -> Set<String> = { emptySet() },
+    ): UpsertOutcome = synchronized(writeLock) {
+        db.inTransaction {
+            val unexpired = messages.filter { message -> message.expiresAtMillis?.let { it > nowMillis } ?: true }
+            val outcome = replaceAllLocked(unexpired, owner, nowMillis, suppressing(), maxStoredMessages)
+            pruneExpiredLocked(nowMillis)
+            // `owner` already fits under the cap, so only other owners' rows are evicted.
+            enforceLimitLocked(maxStoredMessages, preserving = owner)
+            outcome
+        }
+    }
+
+    /**
      * Replaces everything stored for [owner] with [messages]: rows not repeated are deleted. One
      * transaction, so readers never see a half-applied sync.
      *
@@ -159,7 +184,17 @@ internal class MessageStore(
         suppressing: () -> Set<String> = { emptySet() },
         limit: Int? = null,
     ): UpsertOutcome = synchronized(writeLock) {
-        val suppressed = suppressing()
+        db.inTransaction { replaceAllLocked(messages, owner, nowMillis, suppressing(), limit) }
+    }
+
+    /** Must run inside [writeLock] and a transaction. */
+    private fun replaceAllLocked(
+        messages: List<HightouchMessage>,
+        owner: MessageOwner,
+        nowMillis: Long,
+        suppressed: Set<String>,
+        limit: Int?,
+    ): UpsertOutcome {
         // A response may repeat an id; last one wins, at the position of its first occurrence.
         val byId = LinkedHashMap<String, HightouchMessage>()
         for (message in messages) {
@@ -176,47 +211,45 @@ internal class MessageStore(
         val removedIds = ArrayList<String>()
         var unchanged = 0
 
-        db.inTransaction {
-            for (chunk in unique.chunked(CHUNK_SIZE)) {
-                val existing = storedPayloads(owner, chunk.map { it.messageId })
-                for (message in chunk) {
-                    val newPayload = message.payloadData()
-                    val storedPayload = existing[message.messageId]
-                    if (storedPayload == null) {
-                        db.insertOrThrow(MessageStoreSchema.TABLE, null, values(message, newPayload, owner, nowMillis, isNew = true))
-                        insertedIds.add(message.messageId)
-                        continue
-                    }
-                    // Rows written by an older encoding can differ in bytes alone, so fall back
-                    // to a structural compare.
-                    val same = storedPayload.contentEquals(newPayload) || decode(storedPayload) == message
-                    if (same) {
-                        unchanged++
-                        continue
-                    }
-                    db.update(
-                        MessageStoreSchema.TABLE,
-                        values(message, newPayload, owner, nowMillis, isNew = false),
-                        "${Col.OWNER_KEY} = ? AND ${Col.MESSAGE_ID} = ?",
-                        arrayOf(owner.storageKey, message.messageId),
-                    )
-                    updatedIds.add(message.messageId)
+        for (chunk in unique.chunked(CHUNK_SIZE)) {
+            val existing = storedPayloads(owner, chunk.map { it.messageId })
+            for (message in chunk) {
+                val newPayload = message.payloadData()
+                val storedPayload = existing[message.messageId]
+                if (storedPayload == null) {
+                    db.insertOrThrow(MessageStoreSchema.TABLE, null, values(message, newPayload, owner, nowMillis, isNew = true))
+                    insertedIds.add(message.messageId)
+                    continue
                 }
-            }
-
-            val keepIds = unique.mapTo(HashSet()) { it.messageId }
-            db.rawQuery(
-                "SELECT ${Col.MESSAGE_ID} FROM ${MessageStoreSchema.TABLE} WHERE ${Col.OWNER_KEY} = ?",
-                arrayOf(owner.storageKey),
-            ).use { cursor ->
-                while (cursor.moveToNext()) {
-                    val id = cursor.getString(0)
-                    if (id !in keepIds) removedIds.add(id)
+                // Rows written by an older encoding can differ in bytes alone, so fall back
+                // to a structural compare.
+                val same = storedPayload.contentEquals(newPayload) || decode(storedPayload) == message
+                if (same) {
+                    unchanged++
+                    continue
                 }
+                db.update(
+                    MessageStoreSchema.TABLE,
+                    values(message, newPayload, owner, nowMillis, isNew = false),
+                    "${Col.OWNER_KEY} = ? AND ${Col.MESSAGE_ID} = ?",
+                    arrayOf(owner.storageKey, message.messageId),
+                )
+                updatedIds.add(message.messageId)
             }
-            deleteIds(owner, removedIds)
         }
-        UpsertOutcome(insertedIds, updatedIds, removedIds, unchanged)
+
+        val keepIds = unique.mapTo(HashSet()) { it.messageId }
+        db.rawQuery(
+            "SELECT ${Col.MESSAGE_ID} FROM ${MessageStoreSchema.TABLE} WHERE ${Col.OWNER_KEY} = ?",
+            arrayOf(owner.storageKey),
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getString(0)
+                if (id !in keepIds) removedIds.add(id)
+            }
+        }
+        deleteIds(owner, removedIds)
+        return UpsertOutcome(insertedIds, updatedIds, removedIds, unchanged)
     }
 
     /**
@@ -225,34 +258,35 @@ internal class MessageStore(
      * never loses rows that are not reported to the host app; the store can then stay above the
      * cap. Returns the number of rows evicted.
      */
-    fun enforceLimit(maxStoredMessages: Int, preserving: MessageOwner? = null): Int {
-        if (maxStoredMessages < 0) return 0
-        return synchronized(writeLock) {
-            db.inTransaction {
-                val total = scalarInt("SELECT COUNT(*) FROM ${MessageStoreSchema.TABLE}", emptyArray())
-                val overage = total - maxStoredMessages
-                if (overage <= 0) return@inTransaction 0
+    fun enforceLimit(maxStoredMessages: Int, preserving: MessageOwner? = null): Int = synchronized(writeLock) {
+        db.inTransaction { enforceLimitLocked(maxStoredMessages, preserving) }
+    }
 
-                val where = if (preserving != null) "WHERE ${Col.OWNER_KEY} != ? " else ""
-                val args = if (preserving != null) arrayOf(preserving.storageKey) else emptyArray()
-                val victims = ArrayList<Pair<String, String>>()
-                db.rawQuery(
-                    "SELECT ${Col.OWNER_KEY}, ${Col.MESSAGE_ID} FROM ${MessageStoreSchema.TABLE} $where" +
-                        "ORDER BY ${Col.INSERTED_AT} ASC, ${Col.OWNER_KEY} ASC, ${Col.MESSAGE_ID} ASC LIMIT $overage",
-                    args,
-                ).use { cursor ->
-                    while (cursor.moveToNext()) victims.add(cursor.getString(0) to cursor.getString(1))
-                }
-                for ((ownerKey, messageId) in victims) {
-                    db.delete(
-                        MessageStoreSchema.TABLE,
-                        "${Col.OWNER_KEY} = ? AND ${Col.MESSAGE_ID} = ?",
-                        arrayOf(ownerKey, messageId),
-                    )
-                }
-                victims.size
-            }
+    /** Must run inside [writeLock] and a transaction. */
+    private fun enforceLimitLocked(maxStoredMessages: Int, preserving: MessageOwner?): Int {
+        if (maxStoredMessages < 0) return 0
+        val total = scalarInt("SELECT COUNT(*) FROM ${MessageStoreSchema.TABLE}", emptyArray())
+        val overage = total - maxStoredMessages
+        if (overage <= 0) return 0
+
+        val where = if (preserving != null) "WHERE ${Col.OWNER_KEY} != ? " else ""
+        val args = if (preserving != null) arrayOf(preserving.storageKey) else emptyArray()
+        val victims = ArrayList<Pair<String, String>>()
+        db.rawQuery(
+            "SELECT ${Col.OWNER_KEY}, ${Col.MESSAGE_ID} FROM ${MessageStoreSchema.TABLE} $where" +
+                "ORDER BY ${Col.INSERTED_AT} ASC, ${Col.OWNER_KEY} ASC, ${Col.MESSAGE_ID} ASC LIMIT $overage",
+            args,
+        ).use { cursor ->
+            while (cursor.moveToNext()) victims.add(cursor.getString(0) to cursor.getString(1))
         }
+        for ((ownerKey, messageId) in victims) {
+            db.delete(
+                MessageStoreSchema.TABLE,
+                "${Col.OWNER_KEY} = ? AND ${Col.MESSAGE_ID} = ?",
+                arrayOf(ownerKey, messageId),
+            )
+        }
+        return victims.size
     }
 
     // endregion
@@ -264,13 +298,16 @@ internal class MessageStore(
      * expired rows via the query-time predicate, whose boundary this matches (`expiresAt <= now`
      * is expired). Returns the number of rows removed.
      */
-    fun pruneExpired(asOfMillis: Long = System.currentTimeMillis()): Int = synchronized(writeLock) {
+    fun pruneExpired(asOfMillis: Long = System.currentTimeMillis()): Int =
+        synchronized(writeLock) { pruneExpiredLocked(asOfMillis) }
+
+    /** Must run inside [writeLock]. */
+    private fun pruneExpiredLocked(asOfMillis: Long): Int =
         db.delete(
             MessageStoreSchema.TABLE,
             "${Col.EXPIRES_AT} IS NOT NULL AND ${Col.EXPIRES_AT} <= ?",
             arrayOf(asOfMillis.toString()),
         )
-    }
 
     /** Returns the number of rows removed. */
     fun delete(messageId: String, owner: MessageOwner): Int = delete(listOf(messageId), owner)

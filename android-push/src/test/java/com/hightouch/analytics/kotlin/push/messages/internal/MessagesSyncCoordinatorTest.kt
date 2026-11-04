@@ -128,6 +128,28 @@ class MessagesSyncCoordinatorTest {
     }
 
     @Test
+    fun `a response where every message is malformed fails and keeps the cache`() {
+        val owner = MessageOwner(MessageOwner.Kind.USER_ID, "alice")
+        val coordinator = coordinator(ownerProvider = { owner })
+        transport.enqueueIds("m1")
+        coordinator.syncAndWait().getOrThrow()
+
+        val body = buildJsonObject {
+            put("messages", buildJsonArray {
+                add(buildJsonObject { put("notAnId", "oops") })
+                add(buildJsonObject { put("messageId", "") })
+            })
+        }.toString().toByteArray()
+        transport.enqueue(200, body)
+        val result = coordinator.syncAndWait()
+
+        assertTrue("an all-malformed response must fail the sync", result.isFailure)
+        assertEquals(2, (result.exceptionOrNull() as? MalformedMessagesError)?.count)
+        assertEquals("a malformed response is not retried", 2, transport.requestCount)
+        assertEquals(listOf("m1"), store.ids(owner))
+    }
+
+    @Test
     fun `a bare top-level array is accepted`() {
         val owner = MessageOwner(MessageOwner.Kind.USER_ID, "alice")
         val coordinator = coordinator(ownerProvider = { owner })

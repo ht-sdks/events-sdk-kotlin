@@ -17,31 +17,26 @@ internal class MissingMessagesArrayError :
     Exception("The response did not contain a \"messages\" array")
 
 /**
- * The decoded result of a messages fetch. Treated as the authoritative full set for the owner:
- * `replaceAll` deletes anything it omits, so a paged response would lose data.
+ * The decoded result of a messages fetch, treated as the owner's complete set: `replaceAll`
+ * deletes anything it omits. The gateway returns every unexpired message in one response, and
+ * this endpoint must never paginate, since released SDKs would take a page for the full set.
  * Mirrors iOS `MessagesFetchResponse`.
  */
 internal class MessagesFetchResponse(
     val messages: List<HightouchMessage>,
-    val syncedAtMillis: Long?,
     val malformedCount: Int,
 ) {
     companion object {
         /**
          * Accepts `{"messages": [...]}` or a bare array; anything else throws. A malformed entry
-         * is counted and dropped; it never fails the whole sync.
+         * is counted and dropped rather than failing the parse.
          */
         fun parse(data: ByteArray): MessagesFetchResponse {
             val envelope = Json.parseToJsonElement(data.toString(Charsets.UTF_8))
 
-            val rawMessages: JsonArray
-            var syncedAtMillis: Long? = null
-            when (envelope) {
-                is JsonArray -> rawMessages = envelope
-                is JsonObject -> {
-                    rawMessages = envelope["messages"] as? JsonArray ?: throw MissingMessagesArrayError()
-                    syncedAtMillis = MessagesISO8601.dateMillis(envelope["syncedAt"])
-                }
+            val rawMessages = when (envelope) {
+                is JsonArray -> envelope
+                is JsonObject -> envelope["messages"] as? JsonArray ?: throw MissingMessagesArrayError()
                 else -> throw MissingMessagesArrayError()
             }
 
@@ -54,7 +49,7 @@ internal class MessagesFetchResponse(
                     malformedCount++
                 }
             }
-            return MessagesFetchResponse(messages, syncedAtMillis, malformedCount)
+            return MessagesFetchResponse(messages, malformedCount)
         }
     }
 }

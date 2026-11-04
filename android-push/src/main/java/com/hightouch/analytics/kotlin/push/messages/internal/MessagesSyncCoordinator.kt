@@ -116,70 +116,61 @@ internal class MessagesSyncCoordinator(
     private suspend fun performFetch(owner: MessageOwner, deviceToken: String, updatesCooldown: Boolean) {
         var retriesRemaining = 1
         while (true) {
-            try {
-                val response = client.fetchMessages(owner, deviceToken)
-                finish(Result.success(handleFetchSuccess(response, owner, updatesCooldown)))
-                return
+            val response = try {
+                client.fetchMessages(owner, deviceToken)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 if (retriesRemaining > 0 && isRetryable(e)) {
                     retriesRemaining--
                     delay(Random.nextLong(RETRY_DELAY_MIN_MILLIS, RETRY_DELAY_MAX_MILLIS + 1))
-                } else {
-                    val error = (e as? StoreFailure)?.cause ?: e
-                    analytics.reportInternalError(error)
-                    finish(Result.failure(error))
-                    return
+                    continue
                 }
+                analytics.reportInternalError(e)
+                finish(Result.failure(e))
+                return
             }
+            finish(handleFetchSuccess(response, owner, updatesCooldown))
+            return
         }
     }
 
     /**
-     * Store failures are not retried: a store that cannot write will not succeed on repeat, and
-     * the retry exists for the network.
+     * Not retried: the retry exists for the network, and neither a malformed response nor a store
+     * that cannot write will succeed on repeat.
      */
     private fun handleFetchSuccess(
         response: MessagesFetchResponse,
         owner: MessageOwner,
         updatesCooldown: Boolean,
-    ): HightouchMessagesChange {
+    ): Result<HightouchMessagesChange> {
         if (response.malformedCount > 0) {
-            analytics.reportInternalError(MalformedMessagesError(response.malformedCount))
+            val error = MalformedMessagesError(response.malformedCount)
+            analytics.reportInternalError(error)
+            // Replacing with an empty set would delete the owner's whole cache.
+            if (response.messages.isEmpty()) return Result.failure(error)
         }
 
         // The server still returns dismissed messages; a lambda so the log is read inside the
-        // write lock (see `MessageStore.replaceAll`).
+        // write lock, in order with dismissals' deletes.
         val outcome = try {
-            store.replaceAll(
+            store.reconcile(
                 response.messages,
                 owner,
+                config.maxStoredMessages,
                 suppressing = { dismissedIds(owner) },
-                limit = config.maxStoredMessages,
             )
         } catch (e: Exception) {
-            throw StoreFailure(e)
-        }
-        // Housekeeping: a failure here costs disk space, not correctness, so it never fails the sync.
-        try {
-            store.pruneExpired()
-            // `owner` already fits under the cap (see `replaceAll`'s limit), so only other owners'
-            // rows are evicted and every change to `owner` is in `outcome`.
-            store.enforceLimit(config.maxStoredMessages, preserving = owner)
-        } catch (e: Exception) {
             analytics.reportInternalError(e)
+            return Result.failure(e)
         }
 
         if (updatesCooldown) preferences.stampSync(owner, nowMillis())
 
         val change = HightouchMessagesChange(outcome.insertedIds, outcome.updatedIds, outcome.removedIds)
         if (!change.isEmpty) onChange(change)
-        return change
+        return Result.success(change)
     }
-
-    /** Marks a failure that came from the local store rather than the network. */
-    private class StoreFailure(cause: Exception) : Exception(cause)
 
     private fun finish(result: Result<HightouchMessagesChange>) {
         val (completions, followUp) = synchronized(lock) {
@@ -214,7 +205,6 @@ internal class MessagesSyncCoordinator(
 
         /** 5xx and transport failures retry once; a 4xx won't succeed on repeat. */
         private fun isRetryable(error: Throwable): Boolean {
-            if (error is StoreFailure) return false
             if (error is MessagesHttpStatusException) return error.statusCode >= 500
             return true
         }
