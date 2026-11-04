@@ -1,8 +1,8 @@
 package com.hightouch.analytics.kotlin.push.messages
 
 /**
- * Ordering for a message query result. In the priority cases, a lower `priorityRank` sorts
- * first. Final ties break on `messageId`, so the order is stable.
+ * Ordering for a message query result. The priority cases order `high`, `medium`, `low`, then
+ * `default`. Final ties break on `messageId`, so the order is stable.
  */
 enum class HightouchMessageSort {
     PRIORITY_THEN_NEWEST,

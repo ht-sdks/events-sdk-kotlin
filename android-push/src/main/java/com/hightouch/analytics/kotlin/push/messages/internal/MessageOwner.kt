@@ -13,12 +13,15 @@ internal data class MessageOwner(val kind: Kind, val id: String) {
         get() = "${if (kind == Kind.USER_ID) "u" else "a"}:$id"
 
     companion object {
-        /** Null when both identifiers are blank. */
+        /**
+         * Null when both identifiers are empty. Ids are not trimmed: the owner id is sent to the
+         * server as-is, so it must match the `userId` events carry.
+         */
         fun current(analytics: Analytics): MessageOwner? {
-            val userId = analytics.userId()?.trim()
+            val userId = analytics.userId()
             if (!userId.isNullOrEmpty()) return MessageOwner(Kind.USER_ID, userId)
 
-            val anonymousId = analytics.anonymousId().trim()
+            val anonymousId = analytics.anonymousId()
             if (anonymousId.isNotEmpty()) return MessageOwner(Kind.ANONYMOUS_ID, anonymousId)
 
             return null
