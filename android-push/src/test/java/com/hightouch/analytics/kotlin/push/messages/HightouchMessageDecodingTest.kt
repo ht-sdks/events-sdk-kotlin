@@ -2,7 +2,6 @@ package com.hightouch.analytics.kotlin.push.messages
 
 import com.hightouch.analytics.kotlin.core.Analytics
 import com.hightouch.analytics.kotlin.push.messages.internal.MessageOwner
-import com.hightouch.analytics.kotlin.push.messages.internal.MessagePriority
 import io.mockk.every
 import io.mockk.mockk
 import java.util.Calendar
@@ -28,7 +27,7 @@ import org.junit.Test
 class HightouchMessageDecodingTest {
 
     private val fullPayloadString =
-        """{"messageType":"embedded","messageId":"msg_1","campaignId":"camp_1","createdAt":"2026-08-01T12:00:00.000Z","expiresAt":"2026-09-01T12:00:00.000Z","priority":"1","locationId":"home_banner","triggerType":"immediate","customValues":{},"version":"1","variantSlug":"two-button","content":{"elements":[{"id":"1","tag":"background","elementType":"image","order":null,"mediaUrl":"https://hqcoffe.com/beans.jpg","mediaCaption":"HQ beans","text":null}]}}"""
+        """{"messageType":"embedded","messageId":"msg_1","campaignId":"camp_1","createdAt":"2026-08-01T12:00:00.000Z","expiresAt":"2026-09-01T12:00:00.000Z","priority":"high","locationId":"home_banner","triggerType":"immediate","customValues":{},"version":"1","variantSlug":"two-button","content":{"elements":[{"id":"1","tag":"background","elementType":"image","order":null,"mediaUrl":"https://hqcoffe.com/beans.jpg","mediaCaption":"HQ beans","text":null}]}}"""
 
     private fun makeJSON(json: String): JsonElement = Json.parseToJsonElement(json)
 
@@ -51,8 +50,7 @@ class HightouchMessageDecodingTest {
         assertEquals("msg_1", message.messageId)
         assertEquals("embedded", message.messageType)
         assertEquals("camp_1", message.campaignId)
-        assertEquals("1", message.priority)
-        assertEquals(1, message.priorityRank)
+        assertEquals(HightouchMessagePriority.HIGH, message.priority)
         assertEquals("home_banner", message.locationId)
         assertEquals("two-button", message.variantSlug)
         assertEquals("immediate", message.triggerType)
@@ -155,8 +153,8 @@ class HightouchMessageDecodingTest {
     // messageType
 
     @Test
-    fun `messageType missing defaults to empty string`() {
-        assertEquals("", message("""{"messageId":"msg_1"}""").messageType)
+    fun `messageType missing is null`() {
+        assertNull(message("""{"messageId":"msg_1"}""").messageType)
     }
 
     // content.elements ordering
@@ -184,73 +182,39 @@ class HightouchMessageDecodingTest {
         assertEquals(JsonNull, values["f"])
     }
 
-    // MessagePriority.rank
+    // priority
 
     @Test
-    fun `priority rank numeric taken at face value not lexicographic`() {
-        assertEquals(1, MessagePriority.rank("1"))
-        assertEquals(9, MessagePriority.rank("9"))
-        assertEquals(10, MessagePriority.rank("10"))
-        assertTrue(MessagePriority.rank("10") > MessagePriority.rank("9"))
+    fun `priority decodes each level`() {
+        for (level in HightouchMessagePriority.entries) {
+            assertEquals(level, message("""{"messageId":"m","priority":"${level.rawValue}"}""").priority)
+        }
     }
 
     @Test
-    fun `priority rank vocabulary is trimmed and case insensitive`() {
-        assertEquals(100, MessagePriority.rank("high"))
-        assertEquals(100, MessagePriority.rank("HIGH "))
-        assertEquals(0, MessagePriority.rank("urgent"))
-        assertEquals(0, MessagePriority.rank("Critical"))
-        assertEquals(200, MessagePriority.rank("normal"))
-        assertEquals(200, MessagePriority.rank("medium"))
-        assertEquals(200, MessagePriority.rank("default"))
-        assertEquals(300, MessagePriority.rank("low"))
+    fun `priority missing empty or unrecognized is default`() {
+        for (payload in listOf(
+            """{"messageId":"m"}""",
+            """{"messageId":"m","priority":null}""",
+            """{"messageId":"m","priority":""}""",
+            """{"messageId":"m","priority":"urgent"}""",
+            """{"messageId":"m","priority":"HIGH"}""",
+            """{"messageId":"m","priority":1}""",
+        )) {
+            assertEquals(payload, HightouchMessagePriority.DEFAULT, message(payload).priority)
+        }
     }
 
     @Test
-    fun `priority rank empty null and unknown sort last`() {
-        assertEquals(Int.MAX_VALUE, MessagePriority.rank(""))
-        assertEquals(Int.MAX_VALUE, MessagePriority.rank(null))
-        assertEquals(Int.MAX_VALUE, MessagePriority.rank("wat"))
-    }
-
-    @Test
-    fun `priority from numeric JSON ranks same as string spelling`() {
-        val fromNumeric = message("""{"messageId":"m","priority":1}""")
-        val fromString = message("""{"messageId":"m","priority":"1"}""")
-
-        assertEquals("1", fromNumeric.priority)
-        assertEquals(1, fromNumeric.priorityRank)
-        assertEquals(fromString.priorityRank, fromNumeric.priorityRank)
-    }
-
-    @Test
-    fun `integral numbers spelled with a fraction or exponent still rank`() {
-        assertEquals("2", message("""{"messageId":"m","priority":2.0}""").priority)
-        assertEquals("100", message("""{"messageId":"m","priority":1e2}""").priority)
-    }
-
-    @Test
-    fun `misspelled piority key is accepted as priority`() {
-        val message = message("""{"messageId":"m","piority":"1"}""")
-
-        assertEquals("1", message.priority)
-        assertEquals(1, message.priorityRank)
-    }
-
-    @Test
-    fun `correctly spelled priority takes precedence`() {
-        val message = message("""{"messageId":"m","priority":"1","piority":"300"}""")
-
-        assertEquals("1", message.priority)
-        assertEquals(1, message.priorityRank)
-    }
-
-    @Test
-    fun `priority from fractional JSON number sorts last`() {
-        val message = message("""{"messageId":"m","priority":1.5}""")
-
-        assertNull(message.priority)
-        assertEquals(Int.MAX_VALUE, message.priorityRank)
+    fun `priority ranks high medium low then default`() {
+        val ranks = listOf(
+            HightouchMessagePriority.HIGH,
+            HightouchMessagePriority.MEDIUM,
+            HightouchMessagePriority.LOW,
+            HightouchMessagePriority.DEFAULT,
+        ).map { it.rank }
+        assertEquals(ranks.sorted(), ranks)
+        assertEquals(ranks.size, ranks.toSet().size)
     }
 
     // payloadData
@@ -298,6 +262,15 @@ class HightouchMessageDecodingTest {
         )
     }
 
+    /** The owner id is sent to the server as-is, so it must match the `userId` events carry. */
+    @Test
+    fun `MessageOwner current keeps userId verbatim`() {
+        assertEquals(
+            MessageOwner(MessageOwner.Kind.USER_ID, " alice "),
+            MessageOwner.current(analytics(" alice ", "anon-1")),
+        )
+    }
+
     @Test
     fun `MessageOwner current falls back to anonymousId`() {
         assertEquals(
@@ -306,14 +279,14 @@ class HightouchMessageDecodingTest {
         )
         assertEquals(
             MessageOwner(MessageOwner.Kind.ANONYMOUS_ID, "anon-1"),
-            MessageOwner.current(analytics("  ", " anon-1 ")),
+            MessageOwner.current(analytics("", "anon-1")),
         )
     }
 
     @Test
     fun `MessageOwner current returns null when both identifiers are empty`() {
         assertNull(MessageOwner.current(analytics(null, "")))
-        assertNull(MessageOwner.current(analytics(" ", " ")))
+        assertNull(MessageOwner.current(analytics("", "")))
     }
 
     @Test

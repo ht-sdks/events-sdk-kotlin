@@ -1,6 +1,5 @@
 package com.hightouch.analytics.kotlin.push.messages
 
-import com.hightouch.analytics.kotlin.push.messages.internal.MessagePriority
 import com.hightouch.analytics.kotlin.push.messages.internal.MessagesISO8601
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
@@ -21,19 +20,16 @@ import kotlinx.serialization.json.contentOrNull
  *
  * Dates are epoch milliseconds (`java.time` needs API 26).
  *
- * @property messageType `""` when the server omits it.
  * @property expiresAtMillis null means the message never expires.
- * @property priorityRank Derived locally from [priority]; lower sorts first.
  */
 @Serializable(with = HightouchMessageSerializer::class)
 data class HightouchMessage(
     val messageId: String,
-    val messageType: String = "",
+    val messageType: String? = null,
     val campaignId: String? = null,
     val createdAtMillis: Long? = null,
     val expiresAtMillis: Long? = null,
-    val priority: String? = null,
-    val priorityRank: Int = MessagePriority.rank(priority),
+    val priority: HightouchMessagePriority = HightouchMessagePriority.DEFAULT,
     val locationId: String? = null,
     val variantSlug: String? = null,
     val triggerType: String? = null,
@@ -42,6 +38,9 @@ data class HightouchMessage(
     val content: JsonElement? = null,
     val raw: JsonObject = JsonObject(emptyMap()),
 ) {
+    internal val priorityRank: Int
+        get() = priority.rank
+
     /** Encodes [raw] for persistence. Keys are sorted so equal messages produce equal bytes. */
     fun payloadData(): ByteArray {
         val out = StringBuilder()
@@ -60,16 +59,13 @@ data class HightouchMessage(
             if (obj == null || messageId.isNullOrEmpty()) {
                 throw SerializationException("HightouchMessage requires a non-empty \"messageId\".")
             }
-            val priority = MessagePriority.payloadKeys
-                .firstNotNullOfOrNull { MessagePriority.rawValue(obj[it]) }
             return HightouchMessage(
                 messageId = messageId,
-                messageType = obj.string("messageType") ?: "",
+                messageType = obj.string("messageType"),
                 campaignId = obj.string("campaignId"),
                 createdAtMillis = MessagesISO8601.dateMillis(obj["createdAt"]),
                 expiresAtMillis = MessagesISO8601.dateMillis(obj["expiresAt"]),
-                priority = priority,
-                priorityRank = MessagePriority.rank(priority),
+                priority = HightouchMessagePriority.fromPayload(obj["priority"]),
                 locationId = obj.string("locationId"),
                 variantSlug = obj.string("variantSlug"),
                 triggerType = obj.string("triggerType"),
