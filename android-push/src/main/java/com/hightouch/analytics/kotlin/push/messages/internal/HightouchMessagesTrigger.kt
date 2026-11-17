@@ -1,6 +1,7 @@
 package com.hightouch.analytics.kotlin.push.messages.internal
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.hightouch.analytics.kotlin.core.reportInternalError
 import com.hightouch.analytics.kotlin.push.CepEventTracking
 import com.hightouch.analytics.kotlin.push.HightouchPush
@@ -10,7 +11,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -51,24 +51,37 @@ internal object HightouchMessagesTrigger {
 
     /**
      * The outcome of a command, mirroring iOS's `UIBackgroundFetchResult`. Android has no OS-level
-     * counterpart, so it is only reported through `completion` (for logging and tests).
+     * counterpart, so only tests observe it, through `completion`.
      */
     enum class Result { NEW_DATA, NO_DATA, FAILED }
 
     /**
-     * Runs [command], then calls [completion] exactly once, on the calling thread, with the result.
-     * A `delivered` event is tracked and flushed before it, whichever path finishes first.
-     *
-     * `isInitialized`, `messagesEnabled`, `deadlineMillis` and `sync` are test seams; `sync` calls
-     * back on any thread.
+     * Runs [command], tracking and flushing a `delivered` event once it finishes or the deadline
+     * passes, whichever comes first.
      */
+    fun handle(command: HTMessageCommand) {
+        handle(
+            command,
+            completion = {},
+            isInitialized = { HightouchPush.isInitialized },
+            messagesEnabled = { HightouchMessages.isInitialized },
+            deadlineMillis = SELF_IMPOSED_DEADLINE_MILLIS,
+            sync = ::defaultSync,
+        )
+    }
+
+    /**
+     * [handle] with its collaborators injected. Calls [completion] exactly once, on the calling
+     * thread, after the `delivered` event is flushed; [sync] calls back on any thread.
+     */
+    @VisibleForTesting
     fun handle(
         command: HTMessageCommand,
-        completion: (Result) -> Unit = {},
-        isInitialized: () -> Boolean = { HightouchPush.isInitialized },
-        messagesEnabled: () -> Boolean = { HightouchMessages.isInitialized },
-        deadlineMillis: Long = SELF_IMPOSED_DEADLINE_MILLIS,
-        sync: (HTMessageCommand, (HightouchSyncOutcome) -> Unit) -> Unit = ::defaultSync,
+        completion: (Result) -> Unit,
+        isInitialized: () -> Boolean,
+        messagesEnabled: () -> Boolean,
+        deadlineMillis: Long,
+        sync: (HTMessageCommand, (HightouchSyncOutcome) -> Unit) -> Unit,
     ) {
         val verb = command.verb.wireValue
 
@@ -157,7 +170,7 @@ internal object HightouchMessagesTrigger {
         CepEventTracking.track(
             name = CepEventTracking.ENGAGEMENT_EVENTS,
             properties = properties,
-            messageContext = command.messageContext ?: JsonObject(emptyMap()),
+            messageContext = command.messageContext,
             channel = DELIVERED_CHANNEL,
         )
     }
