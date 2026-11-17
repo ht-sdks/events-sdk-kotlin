@@ -2,6 +2,7 @@ plugins {
     id 'java-library'
     id 'kotlin'
     id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'com.vanniktech.maven.publish'
 }
 
 java {
@@ -51,8 +52,6 @@ dependencies {
     testImplementation "org.junit.jupiter:junit-jupiter"
 }
 
-apply from: rootProject.file('gradle/artifacts-core.gradle')
-apply from: rootProject.file('gradle/mvn-publish.gradle')
 apply from: rootProject.file('gradle/codecov.gradle')
 
 // core has no Android BuildConfig, so LIBRARY_VERSION is hand-maintained in Constants.kt
