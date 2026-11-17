@@ -244,13 +244,15 @@ object HightouchPush {
      * a token via `onNewToken`, and by [identify] on user switch.
      *
      * Persists the token, attaches it to all subsequent events via `context.device.token`, and
-     * fires the `"CEP Push Token Events"` event with `provider_event_type = "registered"`.
+     * fires the `"CEP Push Token Events"` event with `provider_event_type = "registered"`. A new
+     * token for an identified user also flushes that event and syncs messages, as [identify] does.
      */
     @JvmStatic
     @Synchronized
     fun register(token: String) {
         val prefs = _prefs ?: error("[HightouchPush] Call initialize() before register().")
         val analytics = analyticsOrError()
+        val previousToken = prefs.token
         prefs.token = token
         analytics.setDeviceToken(token)
         // User info is applied to events asynchronously; stamp the userId captured now so a
@@ -273,6 +275,14 @@ object HightouchPush {
             // process() silently drops events while analytics is disabled. Clear the stamp so
             // the next heartbeat retries the upload instead of treating the drop as a success.
             prefs.lastUploadedAtMillis = 0L
+        }
+        // A sync that ran before this token arrived (e.g. the launch sync on a fresh install,
+        // racing the token fetch) skipped the fetch for want of one, and nothing else retries it
+        // while foreground sync is off. [identify] re-registers an unchanged token and syncs
+        // itself, so it doesn't land here; an anonymous user's inbox is always empty.
+        if (token != previousToken && capturedUserId != null && HightouchMessages.isInitialized) {
+            analytics.flush()
+            HightouchMessages.deviceTokenDidChange()
         }
     }
 

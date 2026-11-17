@@ -53,7 +53,6 @@ object HightouchMessages {
 
     private var analytics: Analytics? = null
     private var config: HightouchMessagesConfig? = null
-    private var appContext: Context? = null
     private var preferences: MessagesPreferences? = null
     private var store: MessageStore? = null
     private var storeFile: File? = null
@@ -96,7 +95,6 @@ object HightouchMessages {
         synchronized(stateLock) {
             this.analytics = analytics
             this.config = config
-            this.appContext = appContext
             this.preferences = MessagesPreferences(appContext)
         }
 
@@ -485,6 +483,15 @@ object HightouchMessages {
     }
 
     /**
+     * Called by `HightouchPush.register` with a new token. The gateway needs a token, so a sync
+     * attempted before this one arrived made no fetch. Unforced and doesn't stamp the cooldown,
+     * like [identityDidChange]: the gateway links the token asynchronously after registration.
+     */
+    internal fun deviceTokenDidChange() {
+        syncInternal(force = false, updatesCooldown = false, completion = null)
+    }
+
+    /**
      * Forced, because launch is the only reconcile point for an app that was killed when a silent
      * push arrived.
      */
@@ -634,7 +641,6 @@ object HightouchMessages {
         synchronized(stateLock) {
             analytics = null
             config = null
-            appContext = null
             preferences = null
             store = null
             storeFile = null

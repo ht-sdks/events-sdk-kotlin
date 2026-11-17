@@ -24,7 +24,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The `HightouchPush` side of messages: configuration and the identity-change sync ordering. */
+/** The `HightouchPush` side of messages: configuration and the identity- and token-change sync ordering. */
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
 class HightouchPushMessagesTest {
@@ -170,5 +170,34 @@ class HightouchPushMessagesTest {
 
         assertTrue(awaitMain { transport.requestCount == 1 })
         assertEquals("fetch", order.single())
+    }
+
+    @Test
+    fun `a token arriving after the launch sync flushes it and syncs`() {
+        every { analytics.userId() } returns "alice"
+        initialize(syncOnLaunch = true)
+        settle()
+        assertEquals("no token yet, so the launch sync made no fetch", 0, transport.requestCount)
+
+        HightouchPush.register("fcm-token")
+
+        assertTrue(awaitMain { transport.requestCount == 1 })
+        assertEquals(listOf("flush", "fetch"), order)
+        assertEquals("fcm-token", transport.requests.single().headers["x-hightouch-device-token"])
+    }
+
+    @Test
+    fun `re-registering the same token does not sync again`() {
+        every { analytics.userId() } returns "alice"
+        initialize()
+        HightouchPush.register("fcm-token")
+        assertTrue(awaitMain { transport.requestCount == 1 })
+        settle()
+
+        HightouchPush.register("fcm-token")
+        settle()
+
+        assertEquals(1, transport.requestCount)
+        assertEquals(listOf("flush", "fetch"), order)
     }
 }

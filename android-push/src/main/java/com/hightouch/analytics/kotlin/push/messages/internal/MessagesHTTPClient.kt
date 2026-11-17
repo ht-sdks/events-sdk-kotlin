@@ -54,7 +54,7 @@ internal object HttpUrlConnectionTransport : MessagesTransport {
  * Blocking: call it off the main thread.
  */
 internal class MessagesHTTPClient(
-    private val analytics: Analytics,
+    analytics: Analytics,
     config: HightouchMessagesConfig,
     private val transport: MessagesTransport = HttpUrlConnectionTransport,
 ) {

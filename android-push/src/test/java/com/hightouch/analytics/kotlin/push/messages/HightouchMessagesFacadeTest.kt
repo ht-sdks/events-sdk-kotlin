@@ -10,6 +10,7 @@ import com.hightouch.analytics.kotlin.push.messages.internal.MessageOwner
 import com.hightouch.analytics.kotlin.push.messages.internal.MessageStore
 import com.hightouch.analytics.kotlin.push.messages.internal.MessageStoreLocation
 import com.hightouch.analytics.kotlin.push.messages.internal.makeMessage
+import com.hightouch.analytics.kotlin.push.messages.internal.seed
 import java.io.File
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.runBlocking
@@ -57,7 +58,7 @@ class HightouchMessagesFacadeTest {
     private fun storeFile() = File(tmp.root, "messages-test.db")
 
     private fun seed(messages: List<HightouchMessage>, owner: MessageOwner, file: File) {
-        MessageStore(context, MessageStoreLocation.Explicit(file)).use { it.replaceAll(messages, owner) }
+        MessageStore(context, MessageStoreLocation.Explicit(file)).use { it.seed(messages, owner) }
     }
 
     private fun MessageStore.use(block: (MessageStore) -> Unit) = try {

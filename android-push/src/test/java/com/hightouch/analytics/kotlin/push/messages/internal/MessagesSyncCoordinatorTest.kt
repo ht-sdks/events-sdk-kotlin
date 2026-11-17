@@ -163,7 +163,7 @@ class MessagesSyncCoordinatorTest {
     @Test
     fun `a 500 retries once then fails and leaves the store unchanged`() {
         val owner = MessageOwner(MessageOwner.Kind.USER_ID, "alice")
-        store.replaceAll(listOf(makeMessage("existing")), owner)
+        store.seed(listOf(makeMessage("existing")), owner)
         val coordinator = coordinator(ownerProvider = { owner })
         transport.enqueue(500)
         transport.enqueue(500)

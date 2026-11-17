@@ -36,13 +36,9 @@ internal class MessageDismissalLog(private val prefs: MessagesPreferences) {
         }
     }
 
-    /** Forgets [owner]'s dismissals, or everyone's when [owner] is null. */
-    fun clear(owner: MessageOwner? = null) {
+    /** Forgets [owner]'s dismissals. */
+    fun clear(owner: MessageOwner) {
         synchronized(lock) {
-            if (owner == null) {
-                prefs.dismissedJson = null
-                return
-            }
             val all = readAll()
             if (all.remove(owner.storageKey) != null) writeAll(all)
         }

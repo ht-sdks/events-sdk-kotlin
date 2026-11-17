@@ -150,7 +150,7 @@ class MessagesGoldenPayloadTest {
         val response = parse(goldenPayload)
         val store = ephemeralStore().also { stores.add(it) }
 
-        val outcome = store.replaceAll(response.messages, alice)
+        val outcome = store.seed(response.messages, alice)
         assertEquals(listOf("msg_promo_two_button_001"), outcome.insertedIds)
 
         val byLocation = store.messages(HightouchMessageQuery(locationId = "home_promo"), alice)

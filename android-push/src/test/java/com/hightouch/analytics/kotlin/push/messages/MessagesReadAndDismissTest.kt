@@ -11,6 +11,7 @@ import com.hightouch.analytics.kotlin.push.messages.internal.MessageStoreLocatio
 import com.hightouch.analytics.kotlin.push.messages.internal.MessagesPreferences
 import com.hightouch.analytics.kotlin.push.messages.internal.ids
 import com.hightouch.analytics.kotlin.push.messages.internal.makeMessage
+import com.hightouch.analytics.kotlin.push.messages.internal.seed
 import java.io.File
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -62,7 +63,7 @@ class MessagesReadAndDismissTest {
         MessageStore(context, MessageStoreLocation.Explicit(file)).also { opened.add(it) }
 
     private fun seed(messages: List<HightouchMessage>, owner: MessageOwner = alice): MessageStore =
-        store().also { it.replaceAll(messages, owner) }
+        store().also { it.seed(messages, owner) }
 
     private fun initializeFacade(userId: String = "alice") {
         HightouchMessages.testStoreLocation = MessageStoreLocation.Explicit(file)
@@ -121,7 +122,7 @@ class MessagesReadAndDismissTest {
         HightouchMessages.messages(locationId = "home")
         settle()
 
-        store.replaceAll(listOf(message("m1")), alice, suppressing = { HightouchMessages.dismissedIds(alice) })
+        store.seed(listOf(message("m1")), alice, suppressing = { HightouchMessages.dismissedIds(alice) })
 
         assertEquals(listOf("m1"), HightouchMessages.messages(locationId = "home").map { it.messageId })
     }
@@ -142,7 +143,7 @@ class MessagesReadAndDismissTest {
         assertEquals(null, HightouchMessages.message("m1"))
         assertEquals(setOf("m1"), HightouchMessages.dismissedIds(alice))
 
-        store.replaceAll(listOf(message("m1"), message("m2")), alice, suppressing = { HightouchMessages.dismissedIds(alice) })
+        store.seed(listOf(message("m1"), message("m2")), alice, suppressing = { HightouchMessages.dismissedIds(alice) })
 
         assertEquals("m1 was dismissed and must not come back", listOf("m2"), store.ids(alice))
     }
@@ -153,7 +154,7 @@ class MessagesReadAndDismissTest {
         store.delete("m1", alice)
         assertEquals(emptyList<String>(), store.ids(alice))
 
-        store.replaceAll(listOf(message("m1")), alice)
+        store.seed(listOf(message("m1")), alice)
 
         assertEquals("a delete alone is undone by the next sync", listOf("m1"), store.ids(alice))
     }
@@ -260,7 +261,7 @@ class MessagesReadAndDismissTest {
 
         assertEquals("suppression must be forgotten too", emptySet<String>(), HightouchMessages.dismissedIds(alice))
 
-        store.replaceAll(listOf(message("m1")), alice, suppressing = { HightouchMessages.dismissedIds(alice) })
+        store.seed(listOf(message("m1")), alice, suppressing = { HightouchMessages.dismissedIds(alice) })
 
         assertEquals("after a clear, a resync must be able to bring the message back", listOf("m1"), store.ids(alice))
     }

@@ -10,6 +10,7 @@ import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.push.messages.internal.MessageOwner
 import com.hightouch.analytics.kotlin.push.messages.internal.MessageStore
 import com.hightouch.analytics.kotlin.push.messages.internal.MessageStoreLocation
+import com.hightouch.analytics.kotlin.push.messages.internal.seed
 import io.mockk.every
 import java.io.File
 import kotlinx.serialization.json.JsonObject
@@ -69,7 +70,7 @@ class HightouchMessagesActionsTest {
     private fun initializeBoth(vararg messages: HightouchMessage): File {
         val file = File(tmp.root, "actions.db")
         MessageStore(context, MessageStoreLocation.Explicit(file)).also {
-            it.replaceAll(messages.toList(), alice)
+            it.seed(messages.toList(), alice)
             it.close()
         }
         HightouchMessages.testStoreLocation = MessageStoreLocation.Explicit(file)
