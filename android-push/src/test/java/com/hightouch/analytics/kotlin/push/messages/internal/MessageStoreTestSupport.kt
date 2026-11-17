@@ -18,6 +18,17 @@ internal fun appContext(): Context = ApplicationProvider.getApplicationContext()
 
 internal fun ephemeralStore(): MessageStore = MessageStore(appContext(), MessageStoreLocation.Ephemeral)
 
+/**
+ * Replaces [owner]'s rows with [messages] through [MessageStore.reconcile], uncapped. [nowMillis]
+ * defaults to the epoch so that messages with any expiry are stored.
+ */
+internal fun MessageStore.seed(
+    messages: List<HightouchMessage>,
+    owner: MessageOwner,
+    nowMillis: Long = 0L,
+    suppressing: () -> Set<String> = { emptySet() },
+): UpsertOutcome = reconcile(messages, owner, maxStoredMessages = Int.MAX_VALUE, nowMillis = nowMillis, suppressing = suppressing)
+
 /** A message with only the given fields set in its raw payload. */
 internal fun makeMessage(
     id: String,

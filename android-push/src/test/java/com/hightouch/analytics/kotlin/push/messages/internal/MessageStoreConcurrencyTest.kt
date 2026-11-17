@@ -59,13 +59,13 @@ class MessageStoreConcurrencyTest {
         failure.get()?.let { throw it }
     }
 
-    private fun checkOverlappingReplaceAll(store: MessageStore) {
+    private fun checkOverlappingReconcile(store: MessageStore) {
         val owners = (0 until 8).map { MessageOwner(MessageOwner.Kind.USER_ID, "owner_$it") }
         val sharedIds = (0 until 20).map { "shared_$it" }
 
         runConcurrently(owners.size) { index ->
             val ids = sharedIds + "unique_$index"
-            store.replaceAll(ids.map { makeMessage(it) }, owners[index])
+            store.seed(ids.map { makeMessage(it) }, owners[index])
         }
 
         val expectedPerOwner = sharedIds.size + 1
@@ -77,22 +77,22 @@ class MessageStoreConcurrencyTest {
     }
 
     @Test
-    fun `8 concurrent replaceAll across owners with overlapping ids union with no crash`() {
-        checkOverlappingReplaceAll(fileStore())
+    fun `8 concurrent reconcile across owners with overlapping ids union with no crash`() {
+        checkOverlappingReconcile(fileStore())
     }
 
     @Test
-    fun `8 concurrent replaceAll works on an in-memory store too`() {
+    fun `8 concurrent reconcile works on an in-memory store too`() {
         val store = ephemeralStore().also { stores.add(it) }
-        checkOverlappingReplaceAll(store)
+        checkOverlappingReconcile(store)
     }
 
     @Test
-    fun `concurrent replaceAll for the same owner ends in one of the submitted sets`() {
+    fun `concurrent reconcile for the same owner ends in one of the submitted sets`() {
         val store = fileStore()
         runConcurrently(6) { index ->
             repeat(5) {
-                store.replaceAll((0 until 30).map { makeMessage("w${index}_$it") }, alice)
+                store.seed((0 until 30).map { makeMessage("w${index}_$it") }, alice)
             }
         }
         val ids = store.ids(alice)
@@ -108,7 +108,7 @@ class MessageStoreConcurrencyTest {
         val failure = AtomicReference<Throwable?>()
         val writer = Thread {
             try {
-                store.replaceAll(messages, alice)
+                store.seed(messages, alice)
             } catch (t: Throwable) {
                 failure.set(t)
             } finally {
@@ -132,7 +132,7 @@ class MessageStoreConcurrencyTest {
     @Test
     fun `reads and deletes interleaved with writes never resurrect deleted rows`() {
         val store = fileStore()
-        store.replaceAll((0 until 50).map { makeMessage("m$it") }, alice)
+        store.seed((0 until 50).map { makeMessage("m$it") }, alice)
 
         runConcurrently(4) { index ->
             when (index) {
@@ -152,7 +152,7 @@ class MessageStoreConcurrencyTest {
     fun `rows survive closing and reopening a file-backed store`() {
         val file = File(tmp.root, "persist.db")
         val first = MessageStore(appContext(), MessageStoreLocation.Explicit(file))
-        first.replaceAll(listOf(makeMessage("m1", campaignId = "c1")), alice, nowMillis = T0)
+        first.seed(listOf(makeMessage("m1", campaignId = "c1")), alice, nowMillis = T0)
         first.close()
 
         val second = MessageStore(appContext(), MessageStoreLocation.Explicit(file)).also { stores.add(it) }
@@ -164,7 +164,7 @@ class MessageStoreConcurrencyTest {
     fun `a deleted row stays deleted after reopening`() {
         val file = File(tmp.root, "persist-delete.db")
         val first = MessageStore(appContext(), MessageStoreLocation.Explicit(file))
-        first.replaceAll(listOf(makeMessage("m1"), makeMessage("m2")), alice)
+        first.seed(listOf(makeMessage("m1"), makeMessage("m2")), alice)
         first.delete("m1", alice)
         first.close()
 
@@ -179,7 +179,7 @@ class MessageStoreConcurrencyTest {
 
         val store = MessageStore(appContext(), MessageStoreLocation.Explicit(file)).also { stores.add(it) }
         assertEquals(0, store.totalCount())
-        store.replaceAll(listOf(makeMessage("m1")), alice)
+        store.seed(listOf(makeMessage("m1")), alice)
         assertEquals(listOf("m1"), store.ids(alice))
     }
 
@@ -187,7 +187,7 @@ class MessageStoreConcurrencyTest {
     fun `ephemeral stores are independent of each other`() {
         val a = ephemeralStore().also { stores.add(it) }
         val b = ephemeralStore().also { stores.add(it) }
-        a.replaceAll(listOf(makeMessage("m1")), alice)
+        a.seed(listOf(makeMessage("m1")), alice)
         assertEquals(0, b.totalCount())
     }
 }

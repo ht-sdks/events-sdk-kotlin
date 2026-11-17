@@ -43,14 +43,11 @@ class MessageStoreSchemaTest {
             "CREATE TABLE messages (" +
                 "messageId TEXT NOT NULL, " +
                 "ownerKey TEXT NOT NULL, " +
-                "messageType TEXT, " +
-                "campaignId TEXT, " +
                 "createdAt INTEGER, " +
                 "expiresAt INTEGER, " +
                 "priorityRank INTEGER NOT NULL DEFAULT 2147483647, " +
                 "locationId TEXT, " +
                 "variantSlug TEXT, " +
-                "messageVersion TEXT, " +
                 "payload BLOB NOT NULL, " +
                 "insertedAt INTEGER NOT NULL, " +
                 "PRIMARY KEY (ownerKey, messageId))",
@@ -110,7 +107,7 @@ class MessageStoreSchemaTest {
         store.database.execSQL(
             "INSERT INTO messages (messageId, ownerKey, payload, insertedAt) VALUES ('m', 'u:alice', x'01', 0)",
         )
-        store.database.rawQuery("SELECT messageType, priorityRank, expiresAt FROM messages", null).use {
+        store.database.rawQuery("SELECT locationId, priorityRank, expiresAt FROM messages", null).use {
             assertTrue(it.moveToFirst())
             assertTrue(it.isNull(0))
             assertEquals(Int.MAX_VALUE, it.getInt(1))

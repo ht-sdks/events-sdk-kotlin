@@ -12,18 +12,15 @@ internal object MessageStoreSchema {
 
     const val TABLE = "messages"
 
-    /** Column names; `messageVersion` rather than `version` to avoid confusion with [MODEL_VERSION]. */
+    /** Column names. */
     object Col {
         const val MESSAGE_ID = "messageId"
         const val OWNER_KEY = "ownerKey"
-        const val MESSAGE_TYPE = "messageType"
-        const val CAMPAIGN_ID = "campaignId"
         const val CREATED_AT = "createdAt"
         const val EXPIRES_AT = "expiresAt"
         const val PRIORITY_RANK = "priorityRank"
         const val LOCATION_ID = "locationId"
         const val VARIANT_SLUG = "variantSlug"
-        const val MESSAGE_VERSION = "messageVersion"
         const val PAYLOAD = "payload"
         const val INSERTED_AT = "insertedAt"
     }
@@ -37,14 +34,11 @@ internal object MessageStoreSchema {
         "CREATE TABLE messages (" +
             "messageId TEXT NOT NULL, " +
             "ownerKey TEXT NOT NULL, " +
-            "messageType TEXT, " +
-            "campaignId TEXT, " +
             "createdAt INTEGER, " +
             "expiresAt INTEGER, " +
             "priorityRank INTEGER NOT NULL DEFAULT 2147483647, " +
             "locationId TEXT, " +
             "variantSlug TEXT, " +
-            "messageVersion TEXT, " +
             "payload BLOB NOT NULL, " +
             "insertedAt INTEGER NOT NULL, " +
             "PRIMARY KEY (ownerKey, messageId))"

@@ -33,7 +33,7 @@ class MessageStoreQueryTest {
 
     @Test
     fun `location only variant only both and neither filters`() {
-        store.replaceAll(
+        store.seed(
             listOf(
                 makeMessage("m_loc_a_var_x", locationId = "loc_a", variantSlug = "var_x"),
                 makeMessage("m_loc_a_var_y", locationId = "loc_a", variantSlug = "var_y"),
@@ -60,8 +60,8 @@ class MessageStoreQueryTest {
 
     @Test
     fun `rows for another owner are never returned by any query`() {
-        store.replaceAll(listOf(makeMessage("alice_msg")), alice)
-        store.replaceAll(listOf(makeMessage("bob_msg")), bob)
+        store.seed(listOf(makeMessage("alice_msg")), alice)
+        store.seed(listOf(makeMessage("bob_msg")), bob)
 
         assertEquals(listOf("bob_msg"), ids(HightouchMessageQuery(), bob))
         assertEquals(1, store.count(HightouchMessageQuery(), bob))
@@ -72,7 +72,7 @@ class MessageStoreQueryTest {
 
     @Test
     fun `limit is honored and zero or negative are unlimited`() {
-        store.replaceAll((0 until 5).map { makeMessage("m$it") }, alice)
+        store.seed((0 until 5).map { makeMessage("m$it") }, alice)
 
         assertEquals(2, ids(HightouchMessageQuery(limit = 2)).size)
         assertEquals(5, ids(HightouchMessageQuery(limit = 0)).size)
@@ -82,7 +82,7 @@ class MessageStoreQueryTest {
 
     @Test
     fun `exact id sequence for mixed priority rank and createdAt`() {
-        store.replaceAll(
+        store.seed(
             listOf(
                 makeMessage("low_old", priority = "low", createdAtMillis = T0),
                 makeMessage("high_old", priority = "high", createdAtMillis = T0),
@@ -113,7 +113,7 @@ class MessageStoreQueryTest {
 
     @Test
     fun `messages without createdAt sort as oldest`() {
-        store.replaceAll(
+        store.seed(
             listOf(makeMessage("dated", createdAtMillis = T0), makeMessage("undated")),
             alice,
         )
@@ -125,7 +125,7 @@ class MessageStoreQueryTest {
     fun `total order is stable across 20 repeated fetches for identical rank and date`() {
         // Inserted in scrambled order so only the messageId tiebreak can produce the expected order.
         val inserted = listOf("m7", "m2", "m9", "m0", "m5", "m1", "m8", "m3", "m6", "m4")
-        store.replaceAll(inserted.map { makeMessage(it, priority = "high", createdAtMillis = T0) }, alice)
+        store.seed(inserted.map { makeMessage(it, priority = "high", createdAtMillis = T0) }, alice)
         val expected = inserted.sorted()
 
         for (sort in HightouchMessageSort.values()) {
@@ -136,7 +136,7 @@ class MessageStoreQueryTest {
     @Test
     fun `location id containing quote and percent matches correctly`() {
         val tricky = "it's 100%_\"banner\"; DROP TABLE messages;--"
-        store.replaceAll(
+        store.seed(
             listOf(makeMessage("tricky", locationId = tricky), makeMessage("other", locationId = "home_banner")),
             alice,
         )
@@ -153,7 +153,7 @@ class MessageStoreQueryTest {
 
     @Test
     fun `count matches filtered messages count`() {
-        store.replaceAll(
+        store.seed(
             listOf(
                 makeMessage("a", locationId = "loc_a"),
                 makeMessage("b", locationId = "loc_a"),
@@ -168,14 +168,14 @@ class MessageStoreQueryTest {
     @Test
     fun `a stored message round-trips through the payload`() {
         val message = makeMessage("m1", campaignId = "c", locationId = "l", priority = "high", createdAtMillis = T0)
-        store.replaceAll(listOf(message), alice)
+        store.seed(listOf(message), alice)
         assertEquals(message, store.message("m1", alice))
         assertEquals(listOf(message), store.messages(HightouchMessageQuery(), alice))
     }
 
     @Test
     fun `rows whose payload cannot be decoded are skipped`() {
-        store.replaceAll(listOf(makeMessage("good")), alice)
+        store.seed(listOf(makeMessage("good")), alice)
         store.database.execSQL(
             "INSERT INTO messages (messageId, ownerKey, payload, insertedAt) VALUES ('bad', ?, x'7B', 0)",
             arrayOf(alice.storageKey),
