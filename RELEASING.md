@@ -60,7 +60,9 @@ a key.
 
 4. **Watch the [tagged-release](https://github.com/ht-sdks/events-sdk-kotlin/actions/workflows/tagged-release.yml)
    run**, then confirm the deployment on the
-   [Central Portal Deployments](https://central.sonatype.com/publishing) page. The artifacts
+   [Central Portal Deployments](https://central.sonatype.com/publishing) page. **A green
+   CI run is not enough:** CI exits right after uploading and doesn't wait for the Portal's
+   validation, so a deployment that fails validation only shows up there. The artifacts
    show up on the public
    [artifact page](https://central.sonatype.com/artifact/com.hightouch.analytics.kotlin/android)
    and become resolvable from `mavenCentral()` within roughly 15–30 minutes.
