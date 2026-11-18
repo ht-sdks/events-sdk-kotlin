@@ -6,21 +6,41 @@ Forked from [`segmentio/analytics-kotlin`](https://github.com/segmentio/analytic
 
 ## Installation
 
-Published via [JitPack](https://jitpack.io/#ht-sdks/events-sdk-kotlin/). Add the JitPack
-repository and pick the module you need:
+Published to [Maven Central](https://central.sonatype.com/artifact/com.hightouch.analytics.kotlin/android).
+Pick the module you need:
+
+```gradle
+repositories { mavenCentral() }
+
+dependencies {
+    // Android + push notifications:
+    implementation 'com.hightouch.analytics.kotlin:android-push:0.1.0'
+    // …or Android without FCM push:
+    implementation 'com.hightouch.analytics.kotlin:android:0.1.0'
+    // …or pure JVM:
+    implementation 'com.hightouch.analytics.kotlin:core:0.1.0'
+}
+```
+
+`android-push` depends on `android`, which depends on `core`, so you only need one line.
+
+### JitPack
+
+Every release is also available from [JitPack](https://jitpack.io/#ht-sdks/events-sdk-kotlin/)
+under the `com.github.ht-sdks.events-sdk-kotlin` group:
 
 ```gradle
 repositories { maven { url 'https://jitpack.io' } }
 
 dependencies {
-    // Android + push notifications:
-    implementation 'com.github.ht-sdks.events-sdk-kotlin:android-push:0.0.2'
-    // …or Android without FCM push:
-    implementation 'com.github.ht-sdks.events-sdk-kotlin:android:0.0.2'
-    // …or pure JVM:
-    implementation 'com.github.ht-sdks.events-sdk-kotlin:core:0.0.2'
+    implementation 'com.github.ht-sdks.events-sdk-kotlin:android-push:0.1.0'
 }
 ```
+
+Use **one** source, not both. Gradle treats the two groups as different libraries, so mixing
+them puts duplicate classes on the classpath. If you're moving from JitPack to Maven Central,
+replace every `com.github.ht-sdks.events-sdk-kotlin` dependency with the matching
+`com.hightouch.analytics.kotlin` one.
 
 See [`RELEASING.md`](RELEASING.md) for how releases are cut.
 

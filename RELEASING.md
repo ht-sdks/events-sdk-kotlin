@@ -43,7 +43,7 @@ a key.
    - `VERSION_NAME` (and `VERSION_CODE`) in [`gradle.properties`](gradle.properties)
    - `LIBRARY_VERSION` in
      [`core/.../Constants.kt`](core/src/main/java/com/hightouch/analytics/kotlin/core/Constants.kt)
-   - The install snippet in [`README.md`](README.md)
+   - The versions in the Maven Central and JitPack install snippets in [`README.md`](README.md)
 
    `:android` and `:android-push` read their version from `VERSION_NAME` automatically.
    There is nothing extra to bump for them.
