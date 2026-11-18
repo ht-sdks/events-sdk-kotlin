@@ -12,6 +12,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.firebase.messaging.FirebaseMessaging
 import com.hightouch.analytics.kotlin.push.internal.CustomDataJson
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
+import com.hightouch.analytics.kotlin.push.messages.HightouchMessages
 import com.hightouch.analytics.kotlin.android.Analytics as AndroidAnalytics
 import com.hightouch.analytics.kotlin.core.Analytics
 import com.hightouch.analytics.kotlin.core.emptyJsonObject
@@ -126,6 +127,7 @@ object HightouchPush {
         // process-start (incl. background-start) leg of the upload heartbeat.
         fetchCurrentFcmToken()
         registerForegroundHeartbeat()
+        config.messages?.let { HightouchMessages.initialize(analytics, appContext, it) }
     }
 
     /**
@@ -196,10 +198,12 @@ object HightouchPush {
      * Synchronized so the check-and-upload is a single critical section. [initialize]'s direct
      * fetch and the foreground observer can both resolve a token fetch on the same launch; without
      * atomicity both could observe a stale timestamp and upload, firing a duplicate "registered".
+     *
+     * @return whether the token was uploaded.
      */
     @Synchronized
-    internal fun registerIfDue(token: String) {
-        val prefs = _prefs ?: return
+    internal fun registerIfDue(token: String): Boolean {
+        val prefs = _prefs ?: return false
         val intervalMillis = _config?.tokenUploadIntervalMillis
             ?: HightouchPushConfig.DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS
         if (shouldUploadToken(
@@ -211,7 +215,9 @@ object HightouchPush {
             )
         ) {
             register(token)
+            return true
         }
+        return false
     }
 
     /**
@@ -238,13 +244,15 @@ object HightouchPush {
      * a token via `onNewToken`, and by [identify] on user switch.
      *
      * Persists the token, attaches it to all subsequent events via `context.device.token`, and
-     * fires the `"CEP Push Token Events"` event with `provider_event_type = "registered"`.
+     * fires the `"CEP Push Token Events"` event with `provider_event_type = "registered"`. A new
+     * token for an identified user also flushes that event and syncs messages, as [identify] does.
      */
     @JvmStatic
     @Synchronized
     fun register(token: String) {
         val prefs = _prefs ?: error("[HightouchPush] Call initialize() before register().")
         val analytics = analyticsOrError()
+        val previousToken = prefs.token
         prefs.token = token
         analytics.setDeviceToken(token)
         // User info is applied to events asynchronously; stamp the userId captured now so a
@@ -268,6 +276,14 @@ object HightouchPush {
             // the next heartbeat retries the upload instead of treating the drop as a success.
             prefs.lastUploadedAtMillis = 0L
         }
+        // A sync that ran before this token arrived (e.g. the launch sync on a fresh install,
+        // racing the token fetch) skipped the fetch for want of one, and nothing else retries it
+        // while foreground sync is off. [identify] re-registers an unchanged token and syncs
+        // itself, so it doesn't land here; an anonymous user's inbox is always empty.
+        if (token != previousToken && capturedUserId != null && HightouchMessages.isInitialized) {
+            analytics.flush()
+            HightouchMessages.deviceTokenDidChange()
+        }
     }
 
     /**
@@ -279,6 +295,8 @@ object HightouchPush {
      *  2. Detects user-switch — if a different user was previously identified, calls [logout]
      *     first to cleanly disassociate the old user's token. This also resets analytics
      *     state (which generates a new anonymous id).
+     *  3. After that re-association, flushes it and syncs messages for the new user, whose inbox
+     *     the gateway can't serve until the token is linked. See [HightouchMessages].
      */
     @JvmStatic
     @JvmOverloads
@@ -293,7 +311,13 @@ object HightouchPush {
         // Re-fire the token event so the new user shows up on the registration. When the user is
         // unchanged (e.g. an app that identifies on every launch), go through the heartbeat gate
         // instead so repeat identifies don't emit duplicate "registered" events.
-        _prefs?.token?.let { if (current != userId) register(it) else registerIfDue(it) }
+        val uploaded = _prefs?.token?.let { if (current != userId) { register(it); true } else registerIfDue(it) } ?: false
+        // The messages sync needs the gateway to have linked the token to this user, so it starts
+        // only after the re-registration is tracked and flushed. It doesn't wait for the upload
+        // itself, which has no completion signal, and a logout (above) never syncs: the new
+        // anonymous id's inbox is always empty.
+        if (uploaded) analyticsOrError().flush()
+        HightouchMessages.identityDidChange()
     }
 
     /**
@@ -331,6 +355,9 @@ object HightouchPush {
         _currentUserId = null
         analytics.reset()
     }
+
+    /** Lets entry points bail out instead of hitting the `analyticsOrError()` failure before [initialize]. */
+    internal val isInitialized: Boolean @Synchronized get() = _analytics != null
 
     /** Internal accessor for [CepEventTracking] to fetch the active analytics instance. */
     internal val cepAnalytics: Analytics? @Synchronized get() = _analytics
