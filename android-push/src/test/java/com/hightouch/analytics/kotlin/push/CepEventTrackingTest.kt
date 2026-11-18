@@ -80,6 +80,53 @@ class CepEventTrackingTest {
     }
 
     @Test
+    fun `baseProperties for the in-app channel`() {
+        val base = CepEventTracking.baseProperties(CepEventTracking.Channel.IN_APP)
+        assertEquals("in_app", base["channel_type"]?.jsonPrimitive?.content)
+        assertEquals("in_app_sdk", base["_ht_cep_source"]?.jsonPrimitive?.content)
+        assertEquals("app-1", base["app_id"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `baseProperties win over messageContext for the in-app channel`() {
+        val channel = CepEventTracking.Channel.IN_APP
+        val hijack = buildJsonObject {
+            put("messageId", "msg-1")
+            for (key in CepEventTracking.baseProperties(channel).keys) put(key, "hijacked-$key")
+        }
+
+        val merged = CepEventTracking.mergedProperties(messageContext = hijack, channel = channel)
+
+        for ((key, value) in CepEventTracking.baseProperties(channel)) {
+            assertEquals("messageContext stomped on in_app base property $key", value, merged[key])
+        }
+        assertEquals("msg-1", merged["messageId"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `track forwards the channel to the base properties`() {
+        val captured = slot<JsonObject>()
+        every { analytics.track("CEP Engagement Events", capture(captured)) } returns Unit
+
+        CepEventTracking.track(
+            name = CepEventTracking.ENGAGEMENT_EVENTS,
+            properties = buildJsonObject { put("provider_event_type", CepEventTracking.MESSAGE_DISPLAYED) },
+            channel = CepEventTracking.Channel.IN_APP,
+        )
+
+        assertEquals("in_app", captured.captured["channel_type"]?.jsonPrimitive?.content)
+        assertEquals("in_app_sdk", captured.captured["_ht_cep_source"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `new provider event type constants`() {
+        assertEquals("delivered", CepEventTracking.PUSH_DELIVERED)
+        assertEquals("displayed", CepEventTracking.MESSAGE_DISPLAYED)
+        assertEquals("clicked", CepEventTracking.MESSAGE_CLICKED)
+        assertEquals("dismissed", CepEventTracking.MESSAGE_DISMISSED)
+    }
+
+    @Test
     fun `track invokes analytics-track with merged properties under the given name`() {
         val captured = slot<JsonObject>()
         every { analytics.track("CEP Engagement Events", capture(captured)) } returns Unit
