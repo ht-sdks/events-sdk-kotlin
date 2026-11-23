@@ -202,46 +202,15 @@ class RetryStateMachineTest {
     }
 
     @Test
-    fun `shouldUploadBatch drops batch after max retries`() {
-        val state = RetryState(
-            batchMetadata = mapOf(
-                "batch-1" to BatchMetadata(
-                    failureCount = 100,  // At max
-                    nextRetryTime = 1000L,
-                    firstFailureTime = 1000L
-                )
-            )
-        )
-
-        timeProvider.setTime(2000L)
-
-        val (decision, newState) = stateMachine.shouldUploadBatch(state, "batch-1")
-
-        assertTrue(decision is UploadDecision.DropBatch)
-        assertEquals(DropReason.MAX_RETRIES_EXCEEDED, (decision as UploadDecision.DropBatch).reason)
-        assertFalse(newState.batchMetadata.containsKey("batch-1"))
-    }
-
-    @Test
-    fun `shouldUploadBatch drops batch after max duration`() {
-        val state = RetryState(
-            batchMetadata = mapOf(
-                "batch-1" to BatchMetadata(
-                    failureCount = 5,
-                    nextRetryTime = 1000L,
-                    firstFailureTime = 1000L
-                )
-            )
-        )
-
-        // Advance past max duration (12 hours = 43200 seconds)
-        timeProvider.setTime(1000L + (43200 * 1000L) + 1)
-
-        val (decision, newState) = stateMachine.shouldUploadBatch(state, "batch-1")
-
-        assertTrue(decision is UploadDecision.DropBatch)
-        assertEquals(DropReason.MAX_DURATION_EXCEEDED, (decision as UploadDecision.DropBatch).reason)
-        assertFalse(newState.batchMetadata.containsKey("batch-1"))
+    fun `exhausting fast retries keeps the batch until its deferred retry`() {
+        val failure = ResponseInfo(503, null, "batch-1", 2000L)
+        val state = RetryState(batchMetadata = mapOf("batch-1" to BatchMetadata(99, 1000L, 1000L)))
+        val deferred = stateMachine.handleResponse(state, failure)
+        val retryAt = deferred.batchMetadata.getValue("batch-1").nextRetryTime!!
+        timeProvider.setTime(retryAt - 1)
+        assertEquals(UploadDecision.SkipThisBatch, stateMachine.shouldUploadBatch(deferred, "batch-1").first)
+        timeProvider.setTime(retryAt)
+        assertEquals(UploadDecision.Proceed, stateMachine.shouldUploadBatch(deferred, "batch-1").first)
     }
 
     @Test
