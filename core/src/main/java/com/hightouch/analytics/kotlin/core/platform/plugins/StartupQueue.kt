@@ -1,28 +1,21 @@
 package com.hightouch.analytics.kotlin.core.platform.plugins
 
-import com.hightouch.analytics.kotlin.core.Analytics
-import com.hightouch.analytics.kotlin.core.BaseEvent
-import com.hightouch.analytics.kotlin.core.System
+import com.hightouch.analytics.kotlin.core.*
 import com.hightouch.analytics.kotlin.core.platform.Plugin
+import com.hightouch.analytics.kotlin.core.utilities.EncodeDefaultsJson
 import kotlinx.coroutines.launch
-import com.hightouch.analytics.kotlin.core.platform.plugins.logger.*
+import kotlinx.serialization.json.*
 import sovran.kotlin.Subscriber
-import java.util.Queue
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Analytics plugin to manage started state of analytics client
- * All events will be held in an in-memory queue until started state is enabled, and once enabled
- * events will be replayed into the analytics timeline
- */
 class StartupQueue : Plugin, Subscriber {
-    override val type: Plugin.Type = Plugin.Type.Before
+    override val type = Plugin.Type.Before
     override lateinit var analytics: Analytics
-
-    private val maxSize = 1000
-    private val started: AtomicBoolean = AtomicBoolean(false)
-    private val queuedEvents: Queue<BaseEvent> = ConcurrentLinkedQueue()
+    @Volatile private var started = false
+    private val queued = ArrayDeque<BaseEvent>()
+    private val records = linkedMapOf<String, JsonElement>()
+    private var restored = false
+    private val replayId = ThreadLocal<String>()
+    private val awaitingWrite = mutableSetOf<String>()
 
     override fun setup(analytics: Analytics) {
         super.setup(analytics)
@@ -39,42 +32,82 @@ class StartupQueue : Plugin, Subscriber {
         }
     }
 
-    override fun execute(event: BaseEvent): BaseEvent? {
-        if (!started.get()) {
-            analytics.log("SegmentStartupQueue queueing event")
-            // timeline hasn't started, so queue it up.
-            if (queuedEvents.size >= maxSize) {
-                // if we've exceeded the max queue size start dropping events
-                queuedEvents.remove()
+    private fun restore() {
+        if (restored) return
+        val saved = analytics.storage.read(Storage.Constants.StartupEvents)
+        if (saved != null) {
+            for (entry in Json.parseToJsonElement(saved).jsonObject) {
+                records[entry.key] = entry.value
+                try {
+                    queued.add(EncodeDefaultsJson.decodeFromJsonElement(BaseEventSerializer, entry.value))
+                } catch (e: Exception) { analytics.reportInternalError(e) }
             }
-            queuedEvents.offer(event)
-            return null
         }
-        // the timeline has started, so let the event pass.
-        return event
+        restored = true
     }
 
-    // Handler to manage system update
-    private fun runningUpdate(state: System) {
-        analytics.log("Analytics starting = ${state.running}")
-        started.set(state.running)
-        if (started.get()) {
-            replayEvents()
-        }
+    private fun save() {
+        analytics.storage.writePrefs(Storage.Constants.StartupEvents, JsonObject(records).toString())
     }
 
-    private fun replayEvents() {
-        // replay the queued events to the instance of Analytics we're working with.
-        while (!queuedEvents.isEmpty()) {
+    @Synchronized internal fun capture(event: BaseEvent): Boolean {
+        if (started) return false
+        val info = analytics.userInfo
+        event.anonymousId = info.anonymousId
+        event.integrations = emptyJsonObject
+        if (event.userId.isBlank()) event.userId = info.userId ?: ""
+        if (event is IdentifyEvent || event is AliasEvent) info.userId = event.userId
+        execute(event)
+        return true
+    }
 
-            val event = queuedEvents.poll()
-
-            // It is possible that event might actually be null due to time-slicing
-            // after checking if the queue is empty so we only process if the event
-            // if it is indeed not NULL.
-            event?.let {
-                analytics.process(it, it.enrichment)
+    @Synchronized override fun execute(event: BaseEvent): BaseEvent? {
+        if (started) return event
+        try {
+            restore()
+            if (event.enrichment == null) {
+                records[event.messageId] = EncodeDefaultsJson.encodeToJsonElement(BaseEventSerializer, event)
+                save()
+            } else {
+                analytics.reportInternalError(IllegalStateException(
+                    "Startup events with enrichment callbacks can only be replayed in this session."
+                ))
             }
+        } catch (e: Exception) { analytics.reportInternalError(e) }
+        queued.add(event)
+        return null
+    }
+
+    internal fun isReplaying(event: BaseEvent) = replayId.get()?.let { it == event.messageId } ?: false
+
+    @Synchronized internal fun willWrite(event: BaseEvent) {
+        if (isReplaying(event)) awaitingWrite.add(event.messageId)
+    }
+
+    @Synchronized internal fun didWrite(id: String) {
+        if (awaitingWrite.remove(id)) acknowledge(id)
+    }
+
+    private fun acknowledge(id: String) {
+        if (records.remove(id) != null) save()
+    }
+
+    @Synchronized internal fun runningUpdate(state: System) {
+        started = state.running
+        if (!started || !state.enabled) return
+        try {
+            restore()
+            while (queued.isNotEmpty()) {
+                val event = queued.first()
+                replayId.set(event.messageId)
+                analytics.timeline.process(event)
+                if (event.messageId !in awaitingWrite) acknowledge(event.messageId)
+                queued.removeFirst()
+            }
+        } catch (e: Exception) {
+            analytics.reportInternalError(e)
+        } finally {
+            replayId.remove()
         }
     }
 }
