@@ -54,9 +54,7 @@ data class BackoffConfig(
         408 to RetryBehavior.RETRY,
         410 to RetryBehavior.RETRY,
         429 to RetryBehavior.RETRY,
-        460 to RetryBehavior.RETRY,
-        501 to RetryBehavior.DROP,
-        505 to RetryBehavior.DROP
+        460 to RetryBehavior.RETRY
     )
 ) {
     /**

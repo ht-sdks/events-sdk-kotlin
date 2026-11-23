@@ -14,11 +14,20 @@ class RetryStateMachine(
         state: RetryState,
         response: ResponseInfo
     ): RetryState {
+        if (response.statusCode in sourceErrors) {
+            return state.copy(
+                nextSourceProbe = response.currentTime + state.sourceProbeDelayMs,
+                sourceProbeDelayMs = minOf(60000L, state.sourceProbeDelayMs * 2)
+            )
+        }
+        if (state.nextSourceProbe != 0L) {
+            return handleResponse(state.copy(nextSourceProbe = 0, sourceProbeDelayMs = 1000), response)
+        }
         // Legacy mode: both configs disabled
         if (isLegacyMode) {
             return when {
                 response.statusCode in 200..299 -> state.removeBatch(response.batchFile)
-                response.statusCode == 429 || response.statusCode in 500..599 -> state  // Keep
+                response.statusCode == 408 || response.statusCode == 429 || response.statusCode in 500..599 -> state  // Keep
                 else -> state.removeBatch(response.batchFile)  // Drop on 4xx
             }
         }
@@ -114,6 +123,9 @@ class RetryStateMachine(
         state: RetryState,
         batchFile: String
     ): Pair<UploadDecision, RetryState> {
+        if (timeProvider.currentTimeMillis() < state.nextSourceProbe) {
+            return UploadDecision.SkipAllBatches to state
+        }
         // Legacy mode: skip all smart retry logic
         if (isLegacyMode) {
             return UploadDecision.Proceed to state
@@ -179,18 +191,16 @@ class RetryStateMachine(
     /**
      * Returns true if an error response should result in deleting the batch file.
      * In smart retry mode, only DROP-classified errors delete immediately.
-     * In legacy mode, uses the old 4xx (except 429) = delete behavior.
+     * Source configuration failures are retained in both modes.
      */
     fun shouldDeleteBatch(statusCode: Int): Boolean {
+        if (statusCode in sourceErrors) return false
         if (isLegacyMode) {
-            return statusCode in 400..499 && statusCode != 429
+            return statusCode in 400..499 && statusCode != 408 && statusCode != 429
         }
         if (statusCode in 200..299) return true // Success: file can be removed
-        // 429 with rate limit handling disabled: delete
-        if (statusCode == 429) return !config.rateLimitConfig.enabled
+        if (statusCode == 429 && config.rateLimitConfig.enabled) return false
         val behavior = resolveStatusCodeBehavior(statusCode)
-        // Retryable error with backoff disabled: delete
-        if (behavior == RetryBehavior.RETRY && !config.backoffConfig.enabled) return true
         return behavior == RetryBehavior.DROP
     }
 
@@ -204,6 +214,8 @@ class RetryStateMachine(
         }
     }
 }
+
+private val sourceErrors = setOf(401, 403, 404)
 
 private fun RetryState.removeBatch(batchFile: String): RetryState {
     return copy(batchMetadata = batchMetadata - batchFile)

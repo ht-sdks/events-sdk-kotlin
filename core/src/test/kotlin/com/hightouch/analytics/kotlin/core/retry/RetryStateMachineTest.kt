@@ -54,13 +54,13 @@ class RetryStateMachineTest {
     }
 
     @Test
-    fun `501 overrides default 5xx behavior and drops`() {
+    fun `501 follows default 5xx retry behavior`() {
         val state = RetryState()
         val response = ResponseInfo(501, null, "batch-1", 1000L)
 
         val newState = stateMachine.handleResponse(state, response)
 
-        assertFalse(newState.batchMetadata.containsKey("batch-1"))
+        assertTrue(newState.batchMetadata.containsKey("batch-1"))
     }
 
     @Test
@@ -283,6 +283,26 @@ class RetryStateMachineTest {
         val retryCount = stateMachine.getRetryCount(state, "batch-1")
 
         assertEquals(5, retryCount)
+    }
+
+    @Test
+    fun `source rejection pauses all batches without consuming retry attempts`() {
+        val machine = RetryStateMachine(RetryConfig(), timeProvider)
+        var state = RetryState()
+        for (status in listOf(401, 403, 404)) {
+            state = machine.handleResponse(state, ResponseInfo(status, null, "file", 1000L))
+            assertFalse(machine.shouldDeleteBatch(status))
+            assertEquals(UploadDecision.SkipAllBatches, machine.shouldUploadBatch(state, "other").first)
+        }
+        timeProvider.setTime(5000L)
+        assertEquals(UploadDecision.Proceed, machine.shouldUploadBatch(state, "file").first)
+        assertEquals(0, machine.getRetryCount(state, "file"))
+    }
+
+    @Test
+    fun `legacy mode retains a batch after a request timeout`() {
+        val machine = RetryStateMachine(RetryConfig())
+        assertFalse(machine.shouldDeleteBatch(408))
     }
 
     @Test

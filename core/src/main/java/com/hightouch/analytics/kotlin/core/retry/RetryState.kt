@@ -7,7 +7,9 @@ data class RetryState(
     val pipelineState: PipelineState = PipelineState.READY,
     val waitUntilTime: Long? = null,
     val globalRetryCount: Int = 0,
-    val batchMetadata: Map<String, BatchMetadata> = emptyMap()
+    val batchMetadata: Map<String, BatchMetadata> = emptyMap(),
+    val nextSourceProbe: Long = 0,
+    val sourceProbeDelayMs: Long = 1000
 ) {
     fun isRateLimited(currentTime: Long): Boolean =
         pipelineState == PipelineState.RATE_LIMITED &&
