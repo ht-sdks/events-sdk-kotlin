@@ -14,17 +14,6 @@ class RetryStateMachine(
         state: RetryState,
         response: ResponseInfo
     ): RetryState {
-        val retryableProbe = state.nextSourceProbe != 0L && !shouldDeleteBatch(response.statusCode) &&
-            response.statusCode !in 200..299
-        if (response.statusCode in sourceErrors || retryableProbe) {
-            return state.copy(
-                nextSourceProbe = response.currentTime + state.sourceProbeDelayMs,
-                sourceProbeDelayMs = minOf(60000L, state.sourceProbeDelayMs * 2)
-            )
-        }
-        if (state.nextSourceProbe != 0L) {
-            return handleResponse(state.copy(nextSourceProbe = 0, sourceProbeDelayMs = 1000), response)
-        }
         // Legacy mode: both configs disabled
         if (isLegacyMode) {
             return when {
@@ -106,7 +95,8 @@ class RetryStateMachine(
         val newMetadata = BatchMetadata(
             failureCount = newFailureCount,
             nextRetryTime = nextRetryTime,
-            firstFailureTime = firstFailureTime
+            firstFailureTime = firstFailureTime,
+            deferAfterExhaustion = response.statusCode == 408 || response.statusCode in 500..599
         )
 
         return state.copy(
@@ -131,9 +121,6 @@ class RetryStateMachine(
         state: RetryState,
         batchFile: String
     ): Pair<UploadDecision, RetryState> {
-        if (timeProvider.currentTimeMillis() < state.nextSourceProbe) {
-            return UploadDecision.SkipAllBatches to state
-        }
         // Legacy mode: skip all smart retry logic
         if (isLegacyMode) {
             return UploadDecision.Proceed to state
@@ -160,6 +147,14 @@ class RetryStateMachine(
 
         val metadata = clearedState.batchMetadata[batchFile]
         if (metadata != null) {
+            if (!metadata.deferAfterExhaustion && config.backoffConfig.enabled) {
+                val reason = when {
+                    metadata.failureCount >= config.backoffConfig.maxRetryCount -> DropReason.MAX_RETRIES_EXCEEDED
+                    metadata.exceedsMaxDuration(currentTime, config.backoffConfig.maxTotalBackoffDuration * 1000) -> DropReason.MAX_DURATION_EXCEEDED
+                    else -> null
+                }
+                if (reason != null) return UploadDecision.DropBatch(reason) to clearedState.removeBatch(batchFile)
+            }
             // Check if backoff time has passed
             if (config.backoffConfig.enabled && !metadata.shouldRetry(currentTime)) {
                 return UploadDecision.SkipThisBatch to clearedState
@@ -177,16 +172,15 @@ class RetryStateMachine(
     /**
      * Returns true if an error response should result in deleting the batch file.
      * In smart retry mode, only DROP-classified errors delete immediately.
-     * Source configuration failures are retained in both modes.
      */
     fun shouldDeleteBatch(statusCode: Int): Boolean {
-        if (statusCode in sourceErrors) return false
         if (isLegacyMode) {
             return statusCode in 400..499 && statusCode != 408 && statusCode != 429
         }
         if (statusCode in 200..299) return true // Success: file can be removed
         if (statusCode == 429 && config.rateLimitConfig.enabled) return false
         val behavior = resolveStatusCodeBehavior(statusCode)
+        if (statusCode in 400..499 && statusCode != 408 && statusCode != 429 && !config.backoffConfig.enabled) return true
         return behavior == RetryBehavior.DROP
     }
 
@@ -200,8 +194,6 @@ class RetryStateMachine(
         }
     }
 }
-
-private val sourceErrors = setOf(401, 403, 404)
 
 private fun RetryState.removeBatch(batchFile: String): RetryState {
     return copy(batchMetadata = batchMetadata - batchFile)

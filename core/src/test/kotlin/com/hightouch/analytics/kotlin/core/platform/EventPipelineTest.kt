@@ -212,8 +212,8 @@ internal class EventPipelineTest {
             storage.rollover()
             storage.read(Storage.Constants.Events)
             mockHttpClient.upload(any())
+            storage.removeFile(any())
         }
-        verify(exactly = 0) { storage.removeFile(any()) }
     }
 
     @Test
@@ -225,8 +225,8 @@ internal class EventPipelineTest {
             storage.rollover()
             storage.read(Storage.Constants.Events)
             mockHttpClient.upload(any())
+            storage.removeFile(any())
         }
-        verify(exactly = 0) { storage.removeFile(any()) }
     }
 
     @Test

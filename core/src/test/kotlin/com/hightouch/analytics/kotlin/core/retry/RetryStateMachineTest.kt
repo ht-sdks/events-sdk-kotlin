@@ -202,6 +202,16 @@ class RetryStateMachineTest {
     }
 
     @Test
+    fun `explicit retries for source errors still exhaust their budget`() {
+        val backoff = BackoffConfig(enabled = true, maxRetryCount = 1, default4xxBehavior = RetryBehavior.RETRY)
+        val machine = RetryStateMachine(RetryConfig(backoffConfig = backoff), timeProvider)
+        for (status in listOf(401, 403, 404)) {
+            val state = machine.handleResponse(RetryState(), ResponseInfo(status, null, "batch", 1000L))
+            assertEquals(UploadDecision.DropBatch(DropReason.MAX_RETRIES_EXCEEDED), machine.shouldUploadBatch(state, "batch").first)
+        }
+    }
+
+    @Test
     fun `exhausting fast retries keeps the batch until its deferred retry`() {
         val failure = ResponseInfo(503, null, "batch-1", 2000L)
         val state = RetryState(batchMetadata = mapOf("batch-1" to BatchMetadata(99, 1000L, 1000L)))
@@ -252,20 +262,6 @@ class RetryStateMachineTest {
         val retryCount = stateMachine.getRetryCount(state, "batch-1")
 
         assertEquals(5, retryCount)
-    }
-
-    @Test
-    fun `source rejection pauses all batches without consuming retry attempts`() {
-        val machine = RetryStateMachine(RetryConfig(), timeProvider)
-        var state = RetryState()
-        for (status in listOf(401, 403, 404)) {
-            state = machine.handleResponse(state, ResponseInfo(status, null, "file", 1000L))
-            assertFalse(machine.shouldDeleteBatch(status))
-            assertEquals(UploadDecision.SkipAllBatches, machine.shouldUploadBatch(state, "other").first)
-        }
-        timeProvider.setTime(5000L)
-        assertEquals(UploadDecision.Proceed, machine.shouldUploadBatch(state, "file").first)
-        assertEquals(0, machine.getRetryCount(state, "file"))
     }
 
     @Test
