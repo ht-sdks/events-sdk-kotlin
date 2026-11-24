@@ -16,6 +16,7 @@ import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.push.messages.HightouchMessages
 import com.hightouch.analytics.kotlin.android.Analytics as AndroidAnalytics
 import com.hightouch.analytics.kotlin.core.Analytics
+import com.hightouch.analytics.kotlin.core.InternalHightouchApi
 import com.hightouch.analytics.kotlin.core.emptyJsonObject
 import com.hightouch.analytics.kotlin.core.platform.EnrichmentClosure
 import com.hightouch.analytics.kotlin.core.platform.plugins.setDeviceToken
@@ -39,6 +40,7 @@ import kotlinx.serialization.json.put
  * Thread safety: state mutations are synchronized at the entry-point boundary. Identify does a
  * compound read-check-write on the current user id; the synchronization covers that sequence.
  */
+@OptIn(InternalHightouchApi::class)
 object HightouchPush {
 
     private const val TAG = "HightouchPush"
@@ -92,7 +94,9 @@ object HightouchPush {
     @Synchronized
     fun initialize(context: Context, writeKey: String, config: HightouchPushConfig) {
         val appContext = context.applicationContext
-        val analytics = AndroidAnalytics(writeKey, appContext)
+        val analytics = AndroidAnalytics(writeKey, appContext) {
+            dataCollectionEnabledByDefault = config.dataCollectionEnabledByDefault
+        }
         initInternal(analytics, config, appContext)
     }
 
@@ -103,6 +107,12 @@ object HightouchPush {
      *
      * Host apps using Analytics+Push should always go through [HightouchPush.identify]
      * (not `analytics.identify`) so token re-registration on login is not skipped.
+     *
+     * The provided instance already exists, so a data-collection default of false must be set on
+     * its `Configuration`; otherwise events it tracked before this call would have been collected.
+     *
+     * @throws IllegalArgumentException if [config] turns data collection off by default but the
+     *   [analytics] configuration does not.
      */
     @JvmStatic
     @Synchronized
@@ -111,6 +121,15 @@ object HightouchPush {
             ?: error(
                 "[HightouchPush] Provided Analytics has no application context configured."
             )
+        require(
+            config.dataCollectionEnabledByDefault ||
+                !analytics.configuration.dataCollectionEnabledByDefault
+        ) {
+            "[HightouchPush] HightouchPushConfig turns data collection off by default, but the " +
+                "provided Analytics was created with it on, so it may already have collected " +
+                "events. Set Configuration.dataCollectionEnabledByDefault = false when creating " +
+                "the Analytics instance."
+        }
         initInternal(analytics, config, appContext)
     }
 
@@ -275,11 +294,12 @@ object HightouchPush {
                 event?.also { e -> capturedUserId?.let { e.userId = it } }
             },
         )
-        if (analytics.enabled) {
+        if (analytics.enabled && analytics.dataCollectionEnabled) {
             prefs.lastUploadedAtMillis = System.currentTimeMillis()
         } else {
-            // process() silently drops events while analytics is disabled. Clear the stamp so
-            // the next heartbeat retries the upload instead of treating the drop as a success.
+            // process() silently drops events while analytics is disabled or data collection is
+            // off. Clear the stamp so the next heartbeat retries the upload instead of treating
+            // the drop as a success.
             prefs.lastUploadedAtMillis = 0L
         }
         // A sync that ran before this token arrived (e.g. the launch sync on a fresh install,
@@ -360,6 +380,41 @@ object HightouchPush {
         }
         _currentUserId = null
         analytics.reset()
+    }
+
+    /** Whether the SDK collects data. See [setDataCollectionEnabled]. */
+    @JvmStatic
+    val isDataCollectionEnabled: Boolean
+        @Synchronized get() = analyticsOrError().dataCollectionEnabled
+
+    /**
+     * Turn data collection on or off, typically from a consent prompt. The choice is stored on the
+     * device and wins over [HightouchPushConfig.dataCollectionEnabledByDefault] on every later
+     * launch. Calling it again with the same value does nothing, so it is safe to call on every
+     * launch with the current consent answer.
+     *
+     * While off, no event leaves the device and embedded messages are not fetched. Events tracked
+     * before the switch still upload. [identify], [logout] and the FCM token are still recorded
+     * locally, and the user and anonymous id are kept.
+     *
+     * Turning it on registers the FCM token again, for the current user if one is identified.
+     *
+     * Turning it off does not remove the push registration Hightouch already holds for this device.
+     */
+    @JvmStatic
+    @Synchronized
+    fun setDataCollectionEnabled(enabled: Boolean) {
+        val analytics = analyticsOrError()
+        val wasEnabled = analytics.dataCollectionEnabled
+        analytics.dataCollectionEnabled = enabled
+        if (!enabled || wasEnabled) return
+        // Registrations, identifies and logouts made while off were dropped, so send the current
+        // state rather than waiting for the heartbeat.
+        _prefs?.token?.let { token ->
+            register(token)
+            analytics.flush()
+        }
+        HightouchMessages.dataCollectionDidEnable()
     }
 
     /** Lets entry points bail out instead of hitting the `analyticsOrError()` failure before [initialize]. */

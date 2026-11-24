@@ -70,6 +70,36 @@ place of `analytics.identify`, which would skip the token re-association.
 
 Read-only state: `HightouchPush.userId`, `HightouchPush.anonymousId`, `HightouchPush.fcmToken`.
 
+## 6. Data collection (optional)
+
+By default the SDK collects data as soon as it is initialized. If your app asks the user for
+permission first, start with collection off and turn it on when the user agrees:
+
+```kotlin
+// Collect nothing until the app says so:
+val config = HightouchPushConfig.Builder("YOUR_APP_ID")
+    .setDataCollectionEnabledByDefault(false)
+    .build()
+
+// When the user answers, or changes their answer:
+HightouchPush.setDataCollectionEnabled(true)   // or false
+```
+
+- The choice is stored on the device. On later launches it wins over the config default, so
+  calling `setDataCollectionEnabled` only when the answer changes is enough. Calling it on every
+  launch with the current answer is also fine.
+- While collection is off, no event leaves the device and embedded messages are not fetched.
+  Events tracked before it was turned off still upload.
+- `identify`, `logout` and the FCM token are still recorded locally while off. Turning collection
+  on registers the token for the current user.
+- Turning collection off does not remove the push registration Hightouch already holds for the
+  device.
+- With overload (b) of `initialize`, set `dataCollectionEnabledByDefault = false` on the
+  `Analytics` configuration too. `initialize` throws if only the push config turns it off, because
+  the `Analytics` instance may already have collected events.
+
+`HightouchPush.isDataCollectionEnabled` returns the current value.
+
 ## Notification permission (Android 13+)
 
 On Android 13 (API 33) and above, posting notifications requires the runtime

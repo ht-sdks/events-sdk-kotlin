@@ -1,6 +1,9 @@
+@file:OptIn(InternalHightouchApi::class)
+
 package com.hightouch.analytics.kotlin.push.messages
 
 import android.content.Context
+import com.hightouch.analytics.kotlin.core.InternalHightouchApi
 import android.os.Looper
 import com.hightouch.analytics.kotlin.core.Analytics
 import com.hightouch.analytics.kotlin.core.Configuration
@@ -34,6 +37,7 @@ internal fun messagesAnalytics(
         every { it.userId() } returns userId
         every { it.anonymousId() } returns anonymousId
         every { it.enabled } returns true
+        every { it.dataCollectionEnabled } returns true
         every { it.find(DeviceToken::class) } returns null
     }
 }

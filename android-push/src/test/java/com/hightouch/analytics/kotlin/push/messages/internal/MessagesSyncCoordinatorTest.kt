@@ -1,8 +1,12 @@
+@file:OptIn(InternalHightouchApi::class)
+
 package com.hightouch.analytics.kotlin.push.messages.internal
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.hightouch.analytics.kotlin.core.Analytics
+import com.hightouch.analytics.kotlin.core.InternalHightouchApi
+import io.mockk.every
 import com.hightouch.analytics.kotlin.push.messages.Completions
 import com.hightouch.analytics.kotlin.push.messages.FakeTransport
 import com.hightouch.analytics.kotlin.push.messages.HightouchMessagesChange
@@ -59,8 +63,8 @@ class MessagesSyncCoordinatorTest {
         config: HightouchMessagesConfig = HightouchMessagesConfig.Builder().build(),
         ownerProvider: (Analytics) -> MessageOwner?,
         deviceToken: () -> String? = { DEVICE_TOKEN },
+        analytics: Analytics = analytics(),
     ): MessagesSyncCoordinator {
-        val analytics = analytics()
         return MessagesSyncCoordinator(
             analytics = analytics,
             config = config,
@@ -263,6 +267,20 @@ class MessagesSyncCoordinatorTest {
         val blank = coordinator(ownerProvider = { owner }, deviceToken = { "" })
         assertEmpty(blank.syncAndWait().getOrThrow())
         assertEquals(0, transport.requestCount)
+    }
+
+    @Test
+    fun `data collection off means no request, even when forced`() {
+        val owner = MessageOwner(MessageOwner.Kind.USER_ID, "alice")
+        val analytics = analytics()
+        every { analytics.dataCollectionEnabled } returns false
+        val coordinator = coordinator(ownerProvider = { owner }, analytics = analytics)
+        transport.enqueueIds("m1")
+
+        assertEmpty(coordinator.syncAndWait(force = true).getOrThrow())
+
+        assertEquals(0, transport.requestCount)
+        assertTrue(store.ids(owner).isEmpty())
     }
 
     @Test

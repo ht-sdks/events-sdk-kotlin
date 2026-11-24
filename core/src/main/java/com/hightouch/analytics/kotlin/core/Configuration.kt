@@ -23,6 +23,7 @@ import sovran.kotlin.Store
  * @property autoAddSegmentDestination automatically add SegmentDestination plugin, defaults to `true`
  * @property apiHost set a default apiHost to which Segment sends events, defaults to `api.segment.io/v1`
  * @property httpConfig HTTP retry configuration for rate limiting and exponential backoff, defaults to `null` (legacy mode)
+ * @property dataCollectionEnabledByDefault whether events are collected before the app has chosen with `HightouchPush.setDataCollectionEnabled`, defaults to `true`. Once a choice is stored on the device, it wins over this value.
  */
 data class Configuration(
     val writeKey: String,
@@ -42,7 +43,8 @@ data class Configuration(
     var cdnHost: String = DEFAULT_CDN_HOST,
     var requestFactory: RequestFactory = RequestFactory(),
     var errorHandler: ErrorHandler? = null,
-    var httpConfig: HttpConfig? = null
+    var httpConfig: HttpConfig? = null,
+    var dataCollectionEnabledByDefault: Boolean = true
 ) {
     fun isValid(): Boolean {
         return writeKey.isNotBlank() && application != null

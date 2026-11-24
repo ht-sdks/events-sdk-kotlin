@@ -34,6 +34,9 @@ import java.util.concurrent.TimeUnit
  *   `last_seen_at` a real liveness signal. Defaults to [DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS] (24h)
  *   and is clamped to a minimum of [MIN_TOKEN_UPLOAD_INTERVAL_MILLIS] (12h); there is intentionally
  *   no way to disable it.
+ * @param dataCollectionEnabledByDefault whether the SDK collects events before the app has called
+ *   [HightouchPush.setDataCollectionEnabled] on this install. Defaults to true. Once that method
+ *   has been called, the stored choice wins over this value on every launch.
  * @param messages enables embedded messages when set. Null (the default) leaves the feature off.
  *   See [HightouchMessagesConfig].
  */
@@ -48,6 +51,7 @@ class HightouchPushConfig private constructor(
     val notificationColorResId: Int?,
     val autoLaunchApp: Boolean,
     val tokenUploadIntervalMillis: Long,
+    val dataCollectionEnabledByDefault: Boolean,
     val messages: HightouchMessagesConfig?,
 ) {
     /**
@@ -80,6 +84,7 @@ class HightouchPushConfig private constructor(
         private var notificationColorResId: Int? = null
         private var autoLaunchApp: Boolean = true
         private var tokenUploadIntervalMillis: Long = DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS
+        private var dataCollectionEnabledByDefault: Boolean = true
         private var messages: HightouchMessagesConfig? = null
 
         fun setUrlHandler(handler: HightouchUrlHandler?): Builder = apply { urlHandler = handler }
@@ -109,6 +114,14 @@ class HightouchPushConfig private constructor(
         fun setTokenUploadInterval(millis: Long): Builder =
             apply { tokenUploadIntervalMillis = millis }
 
+        /**
+         * Pass false to collect nothing until the app calls
+         * [HightouchPush.setDataCollectionEnabled] with true. See
+         * [HightouchPushConfig.dataCollectionEnabledByDefault].
+         */
+        fun setDataCollectionEnabledByDefault(enabled: Boolean): Builder =
+            apply { dataCollectionEnabledByDefault = enabled }
+
         /** Enable embedded messages. See [HightouchPushConfig.messages]. */
         fun setMessages(config: HightouchMessagesConfig?): Builder = apply { messages = config }
 
@@ -124,6 +137,7 @@ class HightouchPushConfig private constructor(
             autoLaunchApp = autoLaunchApp,
             tokenUploadIntervalMillis =
                 tokenUploadIntervalMillis.coerceAtLeast(MIN_TOKEN_UPLOAD_INTERVAL_MILLIS),
+            dataCollectionEnabledByDefault = dataCollectionEnabledByDefault,
             messages = messages,
         )
     }

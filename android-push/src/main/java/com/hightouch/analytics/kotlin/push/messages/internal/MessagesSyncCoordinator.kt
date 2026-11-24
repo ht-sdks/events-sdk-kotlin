@@ -1,6 +1,7 @@
 package com.hightouch.analytics.kotlin.push.messages.internal
 
 import com.hightouch.analytics.kotlin.core.Analytics
+import com.hightouch.analytics.kotlin.core.InternalHightouchApi
 import com.hightouch.analytics.kotlin.core.reportInternalError
 import com.hightouch.analytics.kotlin.push.messages.HightouchMessagesChange
 import com.hightouch.analytics.kotlin.push.messages.HightouchMessagesConfig
@@ -67,7 +68,15 @@ internal class MessagesSyncCoordinator(
         begin(force, updatesCooldown, listOfNotNull(completion))
     }
 
+    @OptIn(InternalHightouchApi::class)
     private fun begin(force: Boolean, updatesCooldown: Boolean, completions: List<SyncCompletion>) {
+        // The fetch sends the user id and device token outside the event pipeline, so the gate in
+        // Analytics.process() doesn't cover it.
+        if (!analytics.dataCollectionEnabled) {
+            deliverResult(Result.success(HightouchMessagesChange()), completions)
+            return
+        }
+
         // Resolved outside the lock: both providers can take other locks (HightouchPush's).
         val owner = ownerProvider(analytics)
         val deviceToken = deviceTokenProvider()
