@@ -129,6 +129,33 @@ class MessagesGoldenPayloadTest {
     }
     """.trimIndent()
 
+    /** One message whose template groups `holiday_banner` and `snow` under the condition `is_holiday`. */
+    private fun conditionPayload(on: Boolean): String {
+        val conditionElements = """
+              { "tag": "is_holiday", "elementType": "BooleanCondition", "text": "true" },
+              { "tag": "holiday_banner", "elementType": "Text", "text": "Happy holidays" },
+              { "tag": "snow", "elementType": "Toggle", "text": "true" },"""
+        val conditionBlock = if (on) conditionElements else ""
+        return """
+        {
+          "messages": [
+            {
+              "messageType": "embedded",
+              "messageId": "msg_holiday_001",
+              "locationId": "home_promo",
+              "variantSlug": "holiday-banner",
+              "content": {
+                "elements": [
+                  { "tag": "headline", "elementType": "Text", "text": "Sale" },$conditionBlock
+                  { "tag": "footer", "elementType": "Text", "text": "Ends Sunday" }
+                ]
+              }
+            }
+          ]
+        }
+        """.trimIndent()
+    }
+
     private val stores = ArrayList<MessageStore>()
 
     @After
@@ -141,6 +168,9 @@ class MessagesGoldenPayloadTest {
     /** The `content` of the first message in [body], parsed independently of the SDK's decoder. */
     private fun sentContent(body: String): JsonElement =
         Json.parseToJsonElement(body).jsonObject["messages"]!!.jsonArray.first().jsonObject["content"]!!
+
+    private fun tags(content: JsonElement?): List<String> =
+        content!!.jsonObject["elements"]!!.jsonArray.map { it.jsonObject["tag"]!!.jsonPrimitive.content }
 
     private fun element(content: JsonElement?, tag: String): JsonObject =
         content!!.jsonObject["elements"]!!.jsonArray
@@ -300,6 +330,46 @@ class MessagesGoldenPayloadTest {
                 )
             },
         )
+    }
+
+    @Test
+    fun `a Boolean condition that is on sends its own element and its fields as siblings`() {
+        val response = parse(conditionPayload(on = true))
+
+        assertEquals(0, response.malformedCount)
+        val content = response.messages.single().content
+        assertEquals(listOf("headline", "is_holiday", "holiday_banner", "snow", "footer"), tags(content))
+
+        val condition = element(content, "is_holiday")
+        assertEquals("BooleanCondition", condition["elementType"]!!.jsonPrimitive.content)
+        assertEquals("true", condition["text"]!!.jsonPrimitive.content)
+        assertEquals(sentContent(conditionPayload(on = true)), content)
+    }
+
+    @Test
+    fun `a Boolean condition that is off sends neither its element nor its fields`() {
+        val response = parse(conditionPayload(on = false))
+
+        assertEquals(0, response.malformedCount)
+        val content = response.messages.single().content
+        assertEquals(listOf("headline", "footer"), tags(content))
+        assertEquals(sentContent(conditionPayload(on = false)), content)
+    }
+
+    @Test
+    fun `turning a Boolean condition off replaces the stored elements`() {
+        val store = ephemeralStore().also { stores.add(it) }
+
+        store.seed(parse(conditionPayload(on = true)).messages, alice)
+        val storedOn = store.message("msg_holiday_001", alice)!!
+        assertEquals(sentContent(conditionPayload(on = true)), storedOn.content)
+
+        val outcome = store.seed(parse(conditionPayload(on = false)).messages, alice)
+        assertEquals(listOf("msg_holiday_001"), outcome.updatedIds)
+
+        val storedOff = store.message("msg_holiday_001", alice)!!
+        assertEquals(sentContent(conditionPayload(on = false)), storedOff.content)
+        assertEquals(listOf("headline", "footer"), tags(storedOff.content))
     }
 
     @Test
