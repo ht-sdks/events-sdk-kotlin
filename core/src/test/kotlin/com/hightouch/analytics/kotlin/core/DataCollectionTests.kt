@@ -188,6 +188,66 @@ class DataCollectionTests {
         assertEquals("user-2", analytics.userId())
     }
 
+    private fun Analytics.trackTokenEvent(type: String) {
+        track(
+            DeviceDeletionRequest.EVENT_NAME,
+            buildJsonObject { put(DeviceDeletionRequest.EVENT_TYPE_PROPERTY, type) },
+        )
+    }
+
+    private fun processedTokenEventTypes(): List<String?> =
+        processedEvents.filterIsInstance<TrackEvent>().map {
+            it.properties[DeviceDeletionRequest.EVENT_TYPE_PROPERTY]?.jsonPrimitive?.content
+        }
+
+    @Test
+    fun `a device deletion request is the only event delivered while collection is off`() {
+        val analytics = newAnalytics(dataCollectionEnabledByDefault = false)
+
+        analytics.trackTokenEvent("registered")
+        analytics.trackTokenEvent("disabled")
+        analytics.track("deleted")
+        analytics.trackTokenEvent(DeviceDeletionRequest.EVENT_TYPE)
+
+        assertEquals(listOf<String?>("deleted"), processedTokenEventTypes())
+        assertEquals(1, processedEvents.size)
+    }
+
+    @Test
+    fun `the kill switch still drops a device deletion request`() {
+        val analytics = newAnalytics()
+
+        analytics.enabled = false
+        analytics.trackTokenEvent(DeviceDeletionRequest.EVENT_TYPE)
+
+        assertTrue(processedEvents.isEmpty())
+    }
+
+    @Test
+    fun `a device deletion request held at startup is delivered with collection off`() =
+        runTest(testDispatcher) {
+            val analytics = newAnalytics(dataCollectionEnabledByDefault = false)
+            analytics.pauseEventProcessing()
+
+            analytics.trackTokenEvent(DeviceDeletionRequest.EVENT_TYPE)
+            analytics.resumeEventProcessing()
+
+            assertEquals(listOf<String?>("deleted"), processedTokenEventTypes())
+        }
+
+    @Test
+    fun `an event held at startup is dropped when collection goes off before startup finishes`() =
+        runTest(testDispatcher) {
+            val analytics = newAnalytics()
+            analytics.pauseEventProcessing()
+
+            analytics.track("held at startup")
+            analytics.dataCollectionEnabled = false
+            analytics.resumeEventProcessing()
+
+            assertTrue(processedEvents.isEmpty())
+        }
+
     private companion object {
         const val WRITE_KEY = "data-collection-tests"
     }

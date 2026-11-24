@@ -1,5 +1,7 @@
 package com.hightouch.analytics.kotlin.push
 
+import com.hightouch.analytics.kotlin.core.DeviceDeletionRequest
+import com.hightouch.analytics.kotlin.core.InternalHightouchApi
 import com.hightouch.analytics.kotlin.core.platform.EnrichmentClosure
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -12,15 +14,19 @@ import kotlinx.serialization.json.put
  * wire-format (event names, base properties, and merge precedence) is defined in exactly one
  * place.
  */
+@OptIn(InternalHightouchApi::class)
 internal object CepEventTracking {
 
-    const val PUSH_TOKEN_EVENTS = "CEP Push Token Events"
+    const val PUSH_TOKEN_EVENTS = DeviceDeletionRequest.EVENT_NAME
     const val ENGAGEMENT_EVENTS = "CEP Engagement Events"
 
     // provider_event_type values: lowercase, single-verb. The category-vs-subtype split lives at
     // the track-event-name layer (PUSH_TOKEN_EVENTS), so these values don't repeat "Push Token".
     const val TOKEN_REGISTERED = "registered"
     const val TOKEN_DISABLED = "disabled"
+
+    /** Core lets this one type through while data collection is off, so it is defined there. */
+    const val TOKEN_DELETED = DeviceDeletionRequest.EVENT_TYPE
 
     /** Canonical event type value sent on the wire. */
     const val PUSH_OPENED = "opened"

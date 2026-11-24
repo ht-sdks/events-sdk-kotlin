@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.hightouch.analytics.kotlin.push.internal.DeviceIdStore
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.core.Analytics
+import com.hightouch.analytics.kotlin.core.BaseEvent
 import com.hightouch.analytics.kotlin.core.Configuration
 import com.hightouch.analytics.kotlin.core.TrackEvent
 import com.hightouch.analytics.kotlin.core.platform.EnrichmentClosure
@@ -638,6 +639,193 @@ class HightouchPushTest {
 
         verify(exactly = 0) { analytics.flush() }
     }
+
+    // MARK: - wipeData
+
+    @Test
+    fun `wipeData before initialize throws`() {
+        assertThrows(IllegalStateException::class.java) {
+            HightouchPush.wipeData()
+        }
+    }
+
+    @Test
+    fun `wipeData turns collection off, sends one deleted event for the user and logs out locally`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        HightouchPush.identify("user-1")
+        clearMocks(analytics, answers = false)
+        val trackedProperties = mutableListOf<JsonObject>()
+        val enrichmentSlot = slot<EnrichmentClosure>()
+        every {
+            analytics.track("CEP Push Token Events", capture(trackedProperties), capture(enrichmentSlot))
+        } returns Unit
+
+        HightouchPush.wipeData()
+
+        assertFalse(HightouchPush.isDataCollectionEnabled)
+        verify(exactly = 1) { analytics.dataCollectionEnabled = false }
+        // The only event tracked, so no "disabled" event went out.
+        verify(exactly = 1) { analytics.track(any<String>(), any<JsonObject>(), any()) }
+        val deleted = trackedProperties.single()
+        assertEquals("deleted", deleted["provider_event_type"]?.jsonPrimitive?.content)
+        assertEquals("android", deleted["platform"]?.jsonPrimitive?.content)
+        assertEquals("fcm-token-xyz", deleted["token"]?.jsonPrimitive?.content)
+        assertEquals("user-1", deleted["userId"]?.jsonPrimitive?.content)
+        assertEquals(HightouchPush.cepDeviceId, deleted["device_id"]?.jsonPrimitive?.content)
+        verify(exactly = 1) { analytics.reset() }
+        verify { analytics.flush() }
+        assertNull(HightouchPush.userId)
+        assertEquals("fcm-token-xyz", PushPreferences(context).token)
+        assertEquals(0L, PushPreferences(context).lastUploadedAtMillis)
+
+        // reset() swaps in a new anonymousId immediately; the enrichment must restore the
+        // identity captured before the reset.
+        val event = TrackEvent(properties = JsonObject(emptyMap()), event = "CEP Push Token Events")
+        event.anonymousId = "post-reset-anon"
+        val enriched = enrichmentSlot.captured(event) as TrackEvent
+        assertEquals("user-1", enriched.userId)
+        assertEquals("anon-123", enriched.anonymousId)
+    }
+
+    @Test
+    fun `wipeData sends the deleted event when collection was already off`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        HightouchPush.identify("user-1")
+        HightouchPush.setDataCollectionEnabled(false)
+        val deletedEvents = captureDeletedEvents()
+
+        HightouchPush.wipeData()
+
+        assertEquals(listOf("deleted"), deletedEvents.map(::providerEventType))
+        assertFalse(HightouchPush.isDataCollectionEnabled)
+    }
+
+    @Test
+    fun `wipeData sends the deleted event and resets for an anonymous device`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        val deletedEvents = captureDeletedEvents()
+
+        HightouchPush.wipeData()
+
+        val deleted = deletedEvents.single() as TrackEvent
+        assertEquals("deleted", providerEventType(deleted))
+        assertEquals("fcm-token-xyz", deleted.properties["token"]?.jsonPrimitive?.content)
+        assertFalse(deleted.properties.containsKey("userId"))
+        verify(exactly = 1) { analytics.reset() }
+    }
+
+    @Test
+    fun `wipeData sends the deleted event without a token property when no token is stored`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        val deletedEvents = captureDeletedEvents()
+
+        HightouchPush.wipeData()
+
+        val deleted = deletedEvents.single() as TrackEvent
+        assertEquals("deleted", providerEventType(deleted))
+        assertFalse(deleted.properties.containsKey("token"))
+        assertEquals(HightouchPush.cepDeviceId, deleted.properties["device_id"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `a second wipeData sends nothing more`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        val deletedEvents = captureDeletedEvents()
+
+        HightouchPush.wipeData()
+        HightouchPush.wipeData()
+
+        assertEquals(1, deletedEvents.size)
+    }
+
+    @Test
+    fun `wipeData sends the deleted event again after collection was turned back on`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        val deletedEvents = captureDeletedEvents()
+
+        HightouchPush.wipeData()
+        HightouchPush.setDataCollectionEnabled(true)
+        HightouchPush.wipeData()
+
+        assertEquals(listOf("deleted", "deleted"), deletedEvents.map(::providerEventType))
+    }
+
+    @Test
+    fun `wipeData while analytics is disabled sends nothing and a later call retries`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        HightouchPush.identify("user-1")
+        val deletedEvents = captureDeletedEvents()
+
+        every { analytics.enabled } returns false
+        HightouchPush.wipeData()
+
+        assertTrue(deletedEvents.isEmpty())
+        assertFalse(HightouchPush.isDataCollectionEnabled)
+        assertNull(HightouchPush.userId)
+        verify(exactly = 1) { analytics.reset() }
+
+        every { analytics.enabled } returns true
+        HightouchPush.wipeData()
+
+        assertEquals(listOf("deleted"), deletedEvents.map(::providerEventType))
+    }
+
+    @Test
+    fun `wipeData keeps the device id`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        val before = HightouchPush.cepDeviceId
+
+        HightouchPush.wipeData()
+
+        assertFalse(before.isNullOrEmpty())
+        assertEquals(before, HightouchPush.cepDeviceId)
+        HightouchPush.resetForTesting()
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        assertEquals(before, HightouchPush.cepDeviceId)
+    }
+
+    @Test
+    fun `turning data collection on after wipeData registers the token with no user`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        HightouchPush.identify("user-1")
+        HightouchPush.wipeData()
+        clearMocks(analytics, answers = false)
+        val capturedProps = slot<JsonObject>()
+        val enrichmentSlot = slot<EnrichmentClosure>()
+        every {
+            analytics.track("CEP Push Token Events", capture(capturedProps), capture(enrichmentSlot))
+        } returns Unit
+
+        HightouchPush.setDataCollectionEnabled(true)
+
+        verify(exactly = 1) { analytics.track("CEP Push Token Events", any<JsonObject>(), any()) }
+        assertEquals("registered", capturedProps.captured["provider_event_type"]?.jsonPrimitive?.content)
+        assertEquals("fcm-token-xyz", capturedProps.captured["token"]?.jsonPrimitive?.content)
+        assertFalse(capturedProps.captured.containsKey("userId"))
+        val event = TrackEvent(properties = JsonObject(emptyMap()), event = "CEP Push Token Events")
+        assertEquals("", (enrichmentSlot.captured(event) as TrackEvent).userId)
+    }
+
+    /** Collects the "deleted" token events tracked from here on, as the events core builds from them. */
+    private fun captureDeletedEvents(): List<BaseEvent> {
+        val events = mutableListOf<BaseEvent>()
+        every { analytics.track("CEP Push Token Events", any<JsonObject>(), any()) } answers {
+            val event = TrackEvent(properties = secondArg(), event = firstArg())
+            if (providerEventType(event) == "deleted") events.add(event)
+        }
+        return events
+    }
+
+    private fun providerEventType(event: BaseEvent): String? =
+        (event as TrackEvent).properties["provider_event_type"]?.jsonPrimitive?.content
 
     /** Makes the mock's switch behave like the real property: a write is seen by later reads. */
     private fun stubDataCollectionSwitch(analytics: Analytics, initiallyEnabled: Boolean) {
