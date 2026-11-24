@@ -18,8 +18,7 @@ data class RetryState(
 data class BatchMetadata(
     val failureCount: Int = 0,
     val nextRetryTime: Long? = null,
-    val firstFailureTime: Long? = null,
-    val deferAfterExhaustion: Boolean = true
+    val firstFailureTime: Long? = null
 ) {
     fun shouldRetry(currentTime: Long): Boolean =
         nextRetryTime?.let { currentTime >= it } ?: true
