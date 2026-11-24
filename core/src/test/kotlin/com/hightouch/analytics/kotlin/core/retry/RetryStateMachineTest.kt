@@ -202,6 +202,51 @@ class RetryStateMachineTest {
     }
 
     @Test
+    fun `shouldUploadBatch drops batch after max retries`() {
+        val state = RetryState(
+            batchMetadata = mapOf(
+                "batch-1" to BatchMetadata(
+                    failureCount = 100,  // At max
+                    nextRetryTime = 1000L,
+                    firstFailureTime = 1000L,
+                    deferAfterExhaustion = false
+                )
+            )
+        )
+
+        timeProvider.setTime(2000L)
+
+        val (decision, newState) = stateMachine.shouldUploadBatch(state, "batch-1")
+
+        assertTrue(decision is UploadDecision.DropBatch)
+        assertEquals(DropReason.MAX_RETRIES_EXCEEDED, (decision as UploadDecision.DropBatch).reason)
+        assertFalse(newState.batchMetadata.containsKey("batch-1"))
+    }
+
+    @Test
+    fun `shouldUploadBatch drops batch after max duration`() {
+        val state = RetryState(
+            batchMetadata = mapOf(
+                "batch-1" to BatchMetadata(
+                    failureCount = 5,
+                    nextRetryTime = 1000L,
+                    firstFailureTime = 1000L,
+                    deferAfterExhaustion = false
+                )
+            )
+        )
+
+        // Advance past max duration (12 hours = 43200 seconds)
+        timeProvider.setTime(1000L + (43200 * 1000L) + 1)
+
+        val (decision, newState) = stateMachine.shouldUploadBatch(state, "batch-1")
+
+        assertTrue(decision is UploadDecision.DropBatch)
+        assertEquals(DropReason.MAX_DURATION_EXCEEDED, (decision as UploadDecision.DropBatch).reason)
+        assertFalse(newState.batchMetadata.containsKey("batch-1"))
+    }
+
+    @Test
     fun `explicit retries for source errors still exhaust their budget`() {
         val backoff = BackoffConfig(enabled = true, maxRetryCount = 1, default4xxBehavior = RetryBehavior.RETRY)
         val machine = RetryStateMachine(RetryConfig(backoffConfig = backoff), timeProvider)

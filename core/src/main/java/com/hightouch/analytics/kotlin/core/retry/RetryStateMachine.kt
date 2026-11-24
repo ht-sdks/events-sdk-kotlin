@@ -147,14 +147,21 @@ class RetryStateMachine(
 
         val metadata = clearedState.batchMetadata[batchFile]
         if (metadata != null) {
-            if (!metadata.deferAfterExhaustion && config.backoffConfig.enabled) {
-                val reason = when {
-                    metadata.failureCount >= config.backoffConfig.maxRetryCount -> DropReason.MAX_RETRIES_EXCEEDED
-                    metadata.exceedsMaxDuration(currentTime, config.backoffConfig.maxTotalBackoffDuration * 1000) -> DropReason.MAX_DURATION_EXCEEDED
-                    else -> null
-                }
-                if (reason != null) return UploadDecision.DropBatch(reason) to clearedState.removeBatch(batchFile)
+            val enforceLimits = config.backoffConfig.enabled && !metadata.deferAfterExhaustion
+            // Check retry count limit (must be checked before duration per spec)
+            if (enforceLimits &&
+                metadata.failureCount >= config.backoffConfig.maxRetryCount) {
+                return UploadDecision.DropBatch(DropReason.MAX_RETRIES_EXCEEDED) to
+                       clearedState.removeBatch(batchFile)
             }
+
+            // Check duration limit
+            if (enforceLimits &&
+                metadata.exceedsMaxDuration(currentTime, config.backoffConfig.maxTotalBackoffDuration * 1000)) {
+                return UploadDecision.DropBatch(DropReason.MAX_DURATION_EXCEEDED) to
+                       clearedState.removeBatch(batchFile)
+            }
+
             // Check if backoff time has passed
             if (config.backoffConfig.enabled && !metadata.shouldRetry(currentTime)) {
                 return UploadDecision.SkipThisBatch to clearedState
