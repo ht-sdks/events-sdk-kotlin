@@ -61,7 +61,10 @@ class RetryStateMachine(
         response: ResponseInfo,
         currentTime: Long
     ): RetryState {
-        val waitUntilTimeMs = calculateWaitUntilTimeMs(response.retryAfterSeconds, currentTime)
+        val exhausted = state.globalRetryCount + 1 >= config.rateLimitConfig.maxRetryCount
+        val waitUntilTimeMs = if (exhausted) {
+            currentTime + maxOf(config.rateLimitConfig.maxRetryInterval, response.retryAfterSeconds ?: 0) * 1000L
+        } else calculateWaitUntilTimeMs(response.retryAfterSeconds, currentTime)
 
         return state.copy(
             pipelineState = PipelineState.RATE_LIMITED,
@@ -84,12 +87,16 @@ class RetryStateMachine(
         val existingMetadata = state.batchMetadata[response.batchFile]
         val newFailureCount = (existingMetadata?.failureCount ?: 0) + 1
         val firstFailureTime = existingMetadata?.firstFailureTime ?: currentTime
-        val nextRetryTime = currentTime + calculateBackoffMs(newFailureCount)
+        val exhausted = newFailureCount >= config.backoffConfig.maxRetryCount ||
+            currentTime - firstFailureTime >= config.backoffConfig.maxTotalBackoffDuration * 1000
+        val delay = if (exhausted) config.backoffConfig.maxBackoffInterval * 1000L else calculateBackoffMs(newFailureCount)
+        val nextRetryTime = currentTime + delay
 
         val newMetadata = BatchMetadata(
             failureCount = newFailureCount,
             nextRetryTime = nextRetryTime,
-            firstFailureTime = firstFailureTime
+            firstFailureTime = firstFailureTime,
+            deferAfterExhaustion = response.statusCode == 408 || response.statusCode in 500..599
         )
 
         return state.copy(
@@ -138,25 +145,18 @@ class RetryStateMachine(
             state
         }
 
-        // Check 2: Global rate limit retry count
-        if (config.rateLimitConfig.enabled &&
-            clearedState.globalRetryCount >= config.rateLimitConfig.maxRetryCount) {
-            return UploadDecision.DropBatch(DropReason.MAX_RETRIES_EXCEEDED) to
-                   clearedState.copy(globalRetryCount = 0).removeBatch(batchFile)
-        }
-
-        // Check 3: Per-batch metadata
         val metadata = clearedState.batchMetadata[batchFile]
         if (metadata != null) {
+            val enforceLimits = config.backoffConfig.enabled && !metadata.deferAfterExhaustion
             // Check retry count limit (must be checked before duration per spec)
-            if (config.backoffConfig.enabled &&
+            if (enforceLimits &&
                 metadata.failureCount >= config.backoffConfig.maxRetryCount) {
                 return UploadDecision.DropBatch(DropReason.MAX_RETRIES_EXCEEDED) to
                        clearedState.removeBatch(batchFile)
             }
 
             // Check duration limit
-            if (config.backoffConfig.enabled &&
+            if (enforceLimits &&
                 metadata.exceedsMaxDuration(currentTime, config.backoffConfig.maxTotalBackoffDuration * 1000)) {
                 return UploadDecision.DropBatch(DropReason.MAX_DURATION_EXCEEDED) to
                        clearedState.removeBatch(batchFile)

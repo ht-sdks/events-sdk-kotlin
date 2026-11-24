@@ -80,6 +80,17 @@ internal class StorageImplTest {
 
 
     @Test
+    fun `only completed batches owned by the source are visible`() = runTest {
+        storage.write(Storage.Constants.Events, "{}")
+        storage.rollover()
+        val original = storage.read(Storage.Constants.Events)!!
+        val other = File(File(original).parentFile, "123-other-1")
+        other.writeText("{}")
+        try { assertEquals(original, storage.read(Storage.Constants.Events)) }
+        finally { other.delete() }
+    }
+
+    @Test
     fun `userInfo update calls write`() = runTest {
         val action = object : Action<UserInfo> {
             override fun reduce(state: UserInfo): UserInfo {
