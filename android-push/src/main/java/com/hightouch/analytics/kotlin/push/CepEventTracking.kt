@@ -44,6 +44,7 @@ internal object CepEventTracking {
         put("channel_type", channel.channelType)
         put("_ht_cep_source", channel.source)
         put("app_id", HightouchPush.cepAppId)
+        HightouchPush.cepDeviceId?.let { put("device_id", it) }
     }
 
     /**
