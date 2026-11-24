@@ -21,6 +21,13 @@ import kotlinx.serialization.json.contentOrNull
  * Dates are epoch milliseconds (`java.time` needs API 26).
  *
  * @property expiresAtMillis null means the message never expires.
+ * @property content The message body as untyped JSON, exactly as the server sent it.
+ * `content.elements` is a flat list with one entry per template field. Each entry has a `tag`
+ * (the field's tag in the template), an `elementType` (the field's type) and a value key that
+ * depends on the type: `text` for most types, `mediaUrl` for `Asset`, and `json` for `Json`.
+ * A `Json` element's `json` value is a parsed JSON object or array, never a string, so read it
+ * with `jsonObject` or `jsonArray`. The store does not keep the key order of JSON objects. Look
+ * elements up by `tag` and skip any `elementType` the app does not handle.
  */
 @Serializable(with = HightouchMessageSerializer::class)
 data class HightouchMessage(
