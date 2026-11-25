@@ -20,6 +20,8 @@ class HTTPClient(
     private val requestFactory: RequestFactory = RequestFactory()
 ) {
 
+    @Deprecated("Remote settings are not fetched.")
+    @Suppress("DEPRECATION")
     fun settings(cdnHost: String): Connection {
         val connection: HttpURLConnection = requestFactory.settings(cdnHost, writeKey)
         return connection.createGetConnection()
@@ -152,6 +154,7 @@ open class RequestFactory(
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
+    @Deprecated("Remote settings are not fetched.")
     open fun settings(cdnHost: String, writeKey: String): HttpURLConnection {
         val scheme = if (isLoopback(cdnHost)) "http" else "https"
         val connection: HttpURLConnection = openConnection("$scheme://$cdnHost/projects/$writeKey/settings")
