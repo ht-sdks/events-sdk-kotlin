@@ -21,6 +21,18 @@ class RetryStateStorageTest {
     private val testDispatcher = UnconfinedTestDispatcher()
     private val testScope = TestScope(testDispatcher)
 
+    @Test
+    fun `published JVM constructor and copy signatures remain callable`() {
+        val type = BatchMetadata::class.java
+        val int = Int::class.javaPrimitiveType!!
+        val long = Long::class.javaObjectType
+        val metadata = type.getConstructor(int, long, long).newInstance(2, 30L, 10L)
+        assertEquals(metadata, type.getMethod("copy", int, long, long).invoke(metadata, 2, 30L, 10L))
+        val copyDefault = type.getMethod("copy\$default", type, int, long, long, int, Any::class.java)
+        assertEquals(metadata, copyDefault.invoke(null, metadata, 0, null, null, 7, null))
+        assertFalse(BatchMetadata(deferAfterExhaustion = false).copy(failureCount = 2).deferAfterExhaustion)
+    }
+
     @BeforeEach
     fun setup() {
         clearPersistentStorage()

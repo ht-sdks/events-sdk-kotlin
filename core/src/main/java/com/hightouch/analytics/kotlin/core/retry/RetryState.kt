@@ -21,6 +21,16 @@ data class BatchMetadata(
     val firstFailureTime: Long? = null,
     val deferAfterExhaustion: Boolean = true
 ) {
+    // Keep the constructor and copy signatures used by clients compiled against 0.1.0.
+    constructor(failureCount: Int = 0, nextRetryTime: Long? = null, firstFailureTime: Long? = null) :
+        this(failureCount, nextRetryTime, firstFailureTime, true)
+
+    fun copy(
+        failureCount: Int = this.failureCount,
+        nextRetryTime: Long? = this.nextRetryTime,
+        firstFailureTime: Long? = this.firstFailureTime
+    ): BatchMetadata = BatchMetadata(failureCount, nextRetryTime, firstFailureTime, deferAfterExhaustion)
+
     fun shouldRetry(currentTime: Long): Boolean =
         nextRetryTime?.let { currentTime >= it } ?: true
 
