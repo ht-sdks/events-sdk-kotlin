@@ -269,7 +269,10 @@ class MessagesGoldenPayloadTest {
         }
     }
 
-    /** A message whose single Json element encodes to just under 400 KB, the backend's per-field cap. */
+    /**
+     * A message whose single Json element encodes to just under 400 KB. The backend caps a whole
+     * message at 400 KB, so one Json value is always smaller than that.
+     */
     private fun largeJsonMessage(id: String): HightouchMessage {
         val row = "x".repeat(1000)
         val json = buildJsonObject {
