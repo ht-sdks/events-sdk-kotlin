@@ -18,7 +18,7 @@ class RetryStateMachine(
         if (isLegacyMode) {
             return when {
                 response.statusCode in 200..299 -> state.removeBatch(response.batchFile)
-                response.statusCode == 429 || response.statusCode in 500..599 -> state  // Keep
+                response.statusCode == 408 || response.statusCode == 429 || response.statusCode in 500..599 -> state  // Keep
                 else -> state.removeBatch(response.batchFile)  // Drop on 4xx
             }
         }
@@ -178,12 +178,11 @@ class RetryStateMachine(
 
     /**
      * Returns true if an error response should result in deleting the batch file.
-     * In smart retry mode, only DROP-classified errors delete immediately.
-     * In legacy mode, uses the old 4xx (except 429) = delete behavior.
+     * Smart retries retain the file only when the configured handler can retry it.
      */
     fun shouldDeleteBatch(statusCode: Int): Boolean {
         if (isLegacyMode) {
-            return statusCode in 400..499 && statusCode != 429
+            return statusCode in 400..499 && statusCode != 408 && statusCode != 429
         }
         if (statusCode in 200..299) return true // Success: file can be removed
         // 429 with rate limit handling disabled: delete

@@ -61,6 +61,10 @@ internal class EventPipelineTest {
         MockKAnnotations.init(this)
 
         mockRequestFactory = spyk(RequestFactory())
+        every { mockRequestFactory.upload(any()) } returns mockk<HttpURLConnection>(relaxed = true) {
+            every { outputStream } returns java.io.ByteArrayOutputStream()
+            every { responseCode } returns 200
+        }
         mockHttpClient = spyk(HTTPClient("123", mockRequestFactory))
 
         analytics = mockAnalytics(testScope, testDispatcher)
