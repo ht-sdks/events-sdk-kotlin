@@ -19,7 +19,7 @@ import sovran.kotlin.Store
  * @property trackDeepLinks automatically track [Deep link][https://developer.android.com/training/app-links/deep-linking] opened based on intents, defaults to `false`
  * @property flushAt count of events at which we flush events, defaults to `20`
  * @property flushInterval interval in seconds at which we flush events, defaults to `30 seconds`
- * @property defaultSettings Settings object that will be used as fallback in case of network failure, defaults to empty
+ * @property defaultSettings local destination settings used when no cached settings are available; remote settings are not fetched
  * @property autoAddSegmentDestination automatically add SegmentDestination plugin, defaults to `true`
  * @property apiHost set a default apiHost to which Segment sends events, defaults to `api.segment.io/v1`
  * @property httpConfig HTTP retry configuration for rate limiting and exponential backoff, defaults to `null` (legacy mode)
@@ -38,6 +38,7 @@ data class Configuration(
     var defaultSettings: Settings? = null,
     var autoAddSegmentDestination: Boolean = true,
     var apiHost: String = DEFAULT_API_HOST,
+    @Deprecated("Remote settings are not fetched. Use defaultSettings to configure plugins.")
     var cdnHost: String = DEFAULT_CDN_HOST,
     var requestFactory: RequestFactory = RequestFactory(),
     var errorHandler: ErrorHandler? = null,

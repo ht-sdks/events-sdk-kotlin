@@ -2,6 +2,7 @@ package com.hightouch.analytics.kotlin.push
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.hightouch.analytics.kotlin.push.internal.DeviceIdStore
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.core.Analytics
 import com.hightouch.analytics.kotlin.core.Configuration
@@ -16,6 +17,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import java.io.File
 import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -171,6 +173,58 @@ class HightouchPushTest {
         assertEquals("fcm-token-xyz", props["token"]?.jsonPrimitive?.content)
         verify { analytics.reset() }
         assertNull(HightouchPush.userId)
+    }
+
+    @Test
+    fun `device_id is sent on token events and survives logout, user switch and restart`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        val events = mutableListOf<JsonObject>()
+        every { analytics.track("CEP Push Token Events", capture(events), any()) } returns Unit
+
+        HightouchPush.register("fcm-token-xyz")
+        HightouchPush.identify("user-1")
+        HightouchPush.logout()
+        HightouchPush.identify("user-2")
+        PushPreferences(context).clear()
+        HightouchPush.resetForTesting()
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-rotated")
+
+        val deviceIds = events.map { it["device_id"]?.jsonPrimitive?.content }
+        assertEquals(5, deviceIds.size)
+        assertEquals(1, deviceIds.toSet().size)
+        assertFalse(deviceIds.first().isNullOrEmpty())
+    }
+
+    @Test
+    fun `a new device_id is minted once the stored one is gone`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        val before = HightouchPush.cepDeviceId
+
+        assertTrue(File(context.noBackupFilesDir, DeviceIdStore.FILE_NAME).delete())
+        HightouchPush.resetForTesting()
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+
+        assertFalse(HightouchPush.cepDeviceId.isNullOrEmpty())
+        assertFalse(before == HightouchPush.cepDeviceId)
+    }
+
+    @Test
+    fun `device_id recovers after stored file becomes readable again`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        val stored = HightouchPush.cepDeviceId!!
+        val file = File(context.noBackupFilesDir, DeviceIdStore.FILE_NAME)
+        val backup = File(context.noBackupFilesDir, "${DeviceIdStore.FILE_NAME}.bak")
+        assertTrue(file.renameTo(backup))
+        assertTrue(file.mkdir())
+        HightouchPush.resetForTesting()
+
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        assertNull(HightouchPush.cepDeviceId)
+
+        assertTrue(file.delete())
+        assertTrue(backup.renameTo(file))
+        assertEquals(stored, HightouchPush.cepDeviceId)
     }
 
     @Test

@@ -31,6 +31,8 @@ class ConfigurationBuilder (writeKey: String) {
 
     fun setApiHost(apiHost: String) = apply { configuration.apiHost = apiHost}
 
+    @Deprecated("Remote settings are not fetched. Use defaultSettings to configure plugins.")
+    @Suppress("DEPRECATION")
     fun setCdnHost(cdnHost: String) = apply { configuration.cdnHost = cdnHost}
 
     fun setRequestFactory(requestFactory: RequestFactory) = apply { configuration.requestFactory = requestFactory }

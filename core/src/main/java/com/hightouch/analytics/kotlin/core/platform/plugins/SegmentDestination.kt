@@ -108,9 +108,11 @@ class SegmentDestination: DestinationPlugin(), VersionedPlugin, Subscriber {
         if (settings.hasIntegrationSettings(this)) {
             val segmentSettings = settings.destinationSettings<SegmentSettings>(key)
 
-            // Update apiHost if it exists
+            // Update apiHost if it exists and the caller didn't configure a custom one
             segmentSettings?.apiHost?.let {
-                pipeline?.apiHost = it
+                if (analytics.configuration.apiHost == Constants.DEFAULT_API_HOST) {
+                    pipeline?.apiHost = it
+                }
             }
 
             // Read httpConfig from CDN settings and apply to pipeline

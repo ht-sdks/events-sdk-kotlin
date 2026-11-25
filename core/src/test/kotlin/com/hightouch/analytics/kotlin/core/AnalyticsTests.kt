@@ -1005,32 +1005,13 @@ class AsyncAnalyticsTests {
 
     private lateinit var afterPlugin: StubAfterPlugin
 
-    private lateinit var httpSemaphore: Semaphore
-
     private lateinit var assertSemaphore: Semaphore
 
     private lateinit var actual: CapturingSlot<BaseEvent>
 
     @BeforeEach
     fun setup() {
-        httpSemaphore = Semaphore(0)
         assertSemaphore = Semaphore(0)
-
-        val settings = """
-                {"integrations":{"Segment.io":{"apiKey":"1vNgUqwJeCHmqgI9S1sOm9UHCyfYqbaQ"}},"plan":{},"edgeFunction":{}}
-            """.trimIndent()
-        mockkConstructor(HTTPClient::class)
-        val settingsStream = ByteArrayInputStream(
-            settings.toByteArray()
-        )
-        val httpConnection: HttpURLConnection = mockk()
-        val connection = object : Connection(httpConnection, settingsStream, null) {}
-        every { anyConstructed<HTTPClient>().settings("us-east-1.hightouch-events.com/v1") } answers {
-            // suspend http calls until we tracked events
-            // this will force events get into startup queue
-            httpSemaphore.acquire()
-            connection
-        }
 
         afterPlugin = spyk(StubAfterPlugin())
         actual = slot<BaseEvent>()
@@ -1042,8 +1023,39 @@ class AsyncAnalyticsTests {
             assertSemaphore.release()
             input
         }
-        analytics = Analytics(Configuration(writeKey = "123", application = "Test"))
+        analytics = Analytics(
+            Configuration(
+                writeKey = "async-analytics-tests",
+                application = "Test",
+                storageProvider = com.hightouch.analytics.kotlin.core.utilities.InMemoryStorageProvider(),
+                autoAddSegmentDestination = false,
+            )
+        )
+        val startupQueue = analytics.find(com.hightouch.analytics.kotlin.core.platform.plugins.StartupQueue::class)!!
+        val startedField = startupQueue.javaClass.getDeclaredField("started").apply { isAccessible = true }
+        val started = startedField.get(startupQueue) as java.util.concurrent.atomic.AtomicBoolean
+        runBlocking {
+            while (!started.get()) {
+                kotlinx.coroutines.delay(5)
+            }
+            analytics.pauseEventProcessing()
+            while (started.get()) {
+                kotlinx.coroutines.delay(5)
+            }
+        }
         analytics.add(afterPlugin)
+    }
+
+    private fun awaitQueuedAndResume() {
+        val startupQueue = analytics.find(com.hightouch.analytics.kotlin.core.platform.plugins.StartupQueue::class)!!
+        val queuedField = startupQueue.javaClass.getDeclaredField("queuedEvents").apply { isAccessible = true }
+        val queued = queuedField.get(startupQueue) as java.util.Queue<*>
+        runBlocking {
+            while (queued.isEmpty()) {
+                kotlinx.coroutines.delay(5)
+            }
+            analytics.resumeEventProcessing()
+        }
     }
 
     @Test
@@ -1058,7 +1070,7 @@ class AsyncAnalyticsTests {
 
         // now we have tracked event, i.e. event added to startup queue
         // release the semaphore put on http client, so we startup queue will replay the events
-        httpSemaphore.release()
+        awaitQueuedAndResume()
         // now we need to wait for events being fully replayed before making assertions
         assertSemaphore.acquire()
 
@@ -1091,7 +1103,7 @@ class AsyncAnalyticsTests {
 
         // now we have tracked event, i.e. event added to startup queue
         // release the semaphore put on http client, so we startup queue will replay the events
-        httpSemaphore.release()
+        awaitQueuedAndResume()
         // now we need to wait for events being fully replayed before making assertions
         assertSemaphore.acquire()
 
@@ -1125,7 +1137,7 @@ class AsyncAnalyticsTests {
 
         // now we have tracked event, i.e. event added to startup queue
         // release the semaphore put on http client, so we startup queue will replay the events
-        httpSemaphore.release()
+        awaitQueuedAndResume()
         // now we need to wait for events being fully replayed before making assertions
         assertSemaphore.acquire()
 
@@ -1150,7 +1162,7 @@ class AsyncAnalyticsTests {
 
         // now we have tracked event, i.e. event added to startup queue
         // release the semaphore put on http client, so we startup queue will replay the events
-        httpSemaphore.release()
+        awaitQueuedAndResume()
         // now we need to wait for events being fully replayed before making assertions
         assertSemaphore.acquire()
 

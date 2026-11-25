@@ -36,7 +36,7 @@ data class System(
                                 "apiKey",
                                 configuration.writeKey
                             )
-                            put("apiHost", Constants.DEFAULT_API_HOST)
+                            put("apiHost", configuration.apiHost)
                         })
                 },
                 plan = emptyJsonObject,
