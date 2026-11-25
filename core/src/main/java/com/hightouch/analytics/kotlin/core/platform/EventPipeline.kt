@@ -44,6 +44,7 @@ open class EventPipeline(
 
     // Retry state machine for smart retry logic
     private var retryStateMachine: RetryStateMachine
+    private var lastRateLimitedFile: String? = null
     private var retryState: RetryState
 
 
@@ -161,7 +162,6 @@ open class EventPipeline(
     }
 
     private fun upload() = scope.launch(networkIODispatcher) {
-        var lastRateLimitedFile: String? = null
         uploadChannel.consumeEach {
             analytics.log("$logTag performing flush")
             withContext(fileIODispatcher) {

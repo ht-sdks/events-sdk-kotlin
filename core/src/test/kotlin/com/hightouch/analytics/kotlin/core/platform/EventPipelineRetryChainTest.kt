@@ -167,6 +167,8 @@ class EventPipelineRetryChainTest {
 
             val deadline = fakeTime.currentTimeMillis() + 60_000
             fakeTime.setTime(deadline - 1)
+            pipeline.stop()
+            pipeline.start()
             val second = createTestEvent("second").apply { messageId = "B" }
             pipeline.flushAndRun(second)
             assertEquals(2, parseFilePaths(storage.read(Storage.Constants.Events)).size)
