@@ -12,25 +12,29 @@ class UserInfoPlugin : Plugin {
     override val type: Plugin.Type = Plugin.Type.Before
     override lateinit var analytics: Analytics
 
+    @OptIn(InternalHightouchApi::class)
     override fun execute(event: BaseEvent): BaseEvent {
 
         if (event.type == EventType.Identify) {
-
-            analytics.userInfo.userId = event.userId
-            analytics.userInfo.anonymousId = event.anonymousId
-            analytics.userInfo.traits = (event as IdentifyEvent).traits
-
+            if (analytics.dataCollectionEnabled) {
+                analytics.userInfo = analytics.userInfo.copy(
+                    userId = event.userId,
+                    anonymousId = event.anonymousId,
+                    traits = (event as IdentifyEvent).traits
+                )
+            }
         } else if (event.type === EventType.Alias) {
-
-            analytics.userInfo.anonymousId = event.anonymousId
+            if (analytics.dataCollectionEnabled) {
+                analytics.userInfo = analytics.userInfo.copy(
+                    anonymousId = event.anonymousId
+                )
+            }
         } else {
-
-            analytics.userInfo.userId?.let {
-                event.userId = analytics.userInfo.userId.toString()
+            val current = analytics.userInfo
+            current.userId?.let {
+                event.userId = it
             }
-            analytics.userInfo.anonymousId?.let {
-                event.anonymousId = analytics.userInfo.anonymousId.toString()
-            }
+            event.anonymousId = current.anonymousId
         }
 
         return event

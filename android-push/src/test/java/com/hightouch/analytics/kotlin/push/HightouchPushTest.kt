@@ -1,6 +1,9 @@
+@file:OptIn(InternalHightouchApi::class)
+
 package com.hightouch.analytics.kotlin.push
 
 import android.content.Context
+import com.hightouch.analytics.kotlin.core.InternalHightouchApi
 import androidx.test.core.app.ApplicationProvider
 import com.hightouch.analytics.kotlin.push.internal.DeviceIdStore
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
@@ -9,6 +12,7 @@ import com.hightouch.analytics.kotlin.core.Configuration
 import com.hightouch.analytics.kotlin.core.TrackEvent
 import com.hightouch.analytics.kotlin.core.platform.EnrichmentClosure
 import com.hightouch.analytics.kotlin.core.platform.plugins.DeviceToken
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -483,6 +487,165 @@ class HightouchPushTest {
         assertEquals(sevenDays, config.tokenUploadIntervalMillis)
     }
 
+    // MARK: - data collection switch
+
+    @Test
+    fun `data collection defaults to on in the config`() {
+        assertTrue(HightouchPushConfig.Builder("app-1").build().dataCollectionEnabledByDefault)
+        assertFalse(
+            HightouchPushConfig.Builder("app-1")
+                .setDataCollectionEnabledByDefault(false)
+                .build()
+                .dataCollectionEnabledByDefault
+        )
+    }
+
+    @Test
+    fun `initialize rejects a default of off when the provided Analytics defaults to on`() {
+        val analyticsConfiguration = analytics.configuration
+        every { analyticsConfiguration.dataCollectionEnabledByDefault } returns true
+        val config = HightouchPushConfig.Builder("app-1").setDataCollectionEnabledByDefault(false).build()
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            HightouchPush.initialize(analytics, config)
+        }
+
+        assertTrue(error.message!!.contains("Configuration.dataCollectionEnabledByDefault = false"))
+    }
+
+    @Test
+    fun `initialize accepts a default of off when the provided Analytics also defaults to off`() {
+        val analyticsConfiguration = analytics.configuration
+        every { analyticsConfiguration.dataCollectionEnabledByDefault } returns false
+        stubDataCollectionSwitch(analytics, initiallyEnabled = false)
+        val config = HightouchPushConfig.Builder("app-1").setDataCollectionEnabledByDefault(false).build()
+
+        HightouchPush.initialize(analytics, config)
+
+        assertFalse(HightouchPush.isDataCollectionEnabled)
+    }
+
+    @Test
+    fun `setDataCollectionEnabled before initialize throws`() {
+        assertThrows(IllegalStateException::class.java) {
+            HightouchPush.setDataCollectionEnabled(false)
+        }
+    }
+
+    @Test
+    fun `isDataCollectionEnabled before initialize throws`() {
+        assertThrows(IllegalStateException::class.java) {
+            HightouchPush.isDataCollectionEnabled
+        }
+    }
+
+    @Test
+    fun `turning data collection off stores the choice and sends nothing`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        HightouchPush.identify("user-1")
+        clearMocks(analytics, answers = false)
+
+        HightouchPush.setDataCollectionEnabled(false)
+
+        assertFalse(HightouchPush.isDataCollectionEnabled)
+        verify(exactly = 1) { analytics.dataCollectionEnabled = false }
+        verify(exactly = 0) { analytics.track(any<String>(), any<JsonObject>(), any()) }
+        verify(exactly = 0) { analytics.reset() }
+        assertEquals("user-1", HightouchPush.userId)
+    }
+
+    @Test
+    fun `a token registered while data collection is off is not stamped as uploaded`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.setDataCollectionEnabled(false)
+
+        HightouchPush.register("fcm-token-xyz")
+
+        assertEquals("fcm-token-xyz", PushPreferences(context).token)
+        assertEquals(0L, PushPreferences(context).lastUploadedAtMillis)
+    }
+
+    @Test
+    fun `turning data collection back on registers the token for the user identified while off`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        HightouchPush.setDataCollectionEnabled(false)
+        HightouchPush.identify("user-1")
+        clearMocks(analytics, answers = false)
+        val capturedProps = slot<JsonObject>()
+        val enrichmentSlot = slot<EnrichmentClosure>()
+        every {
+            analytics.track("CEP Push Token Events", capture(capturedProps), capture(enrichmentSlot))
+        } returns Unit
+
+        HightouchPush.setDataCollectionEnabled(true)
+
+        verify(exactly = 1) { analytics.track("CEP Push Token Events", any<JsonObject>(), any()) }
+        assertEquals("registered", capturedProps.captured["provider_event_type"]?.jsonPrimitive?.content)
+        assertEquals("fcm-token-xyz", capturedProps.captured["token"]?.jsonPrimitive?.content)
+        val event = TrackEvent(properties = JsonObject(emptyMap()), event = "CEP Push Token Events")
+        assertEquals("user-1", (enrichmentSlot.captured(event) as TrackEvent).userId)
+        assertTrue(PushPreferences(context).lastUploadedAtMillis > 0L)
+        verify { analytics.flush() }
+    }
+
+    @Test
+    fun `turning data collection on when it is already on sends nothing`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        clearMocks(analytics, answers = false)
+
+        HightouchPush.setDataCollectionEnabled(true)
+
+        verify(exactly = 0) { analytics.track(any<String>(), any<JsonObject>(), any()) }
+    }
+
+    @Test
+    fun `turning data collection on without a token sends nothing`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.setDataCollectionEnabled(false)
+
+        HightouchPush.setDataCollectionEnabled(true)
+
+        assertTrue(HightouchPush.isDataCollectionEnabled)
+        verify(exactly = 0) { analytics.track(any<String>(), any<JsonObject>(), any()) }
+    }
+
+    @Test
+    fun `heartbeat while off skips unchanged token but persists a rotated token`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.setDataCollectionEnabled(false)
+        HightouchPush.register("fcm-token-1")
+        clearMocks(analytics, answers = false)
+
+        assertFalse(HightouchPush.registerIfDue("fcm-token-1"))
+        verify(exactly = 0) { analytics.track(any<String>(), any<JsonObject>(), any()) }
+
+        assertTrue(HightouchPush.registerIfDue("fcm-token-2"))
+        assertEquals("fcm-token-2", PushPreferences(context).token)
+        assertEquals(0L, PushPreferences(context).lastUploadedAtMillis)
+    }
+
+    @Test
+    fun `identify while off does not flush`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        HightouchPush.setDataCollectionEnabled(false)
+        clearMocks(analytics, answers = false)
+
+        HightouchPush.identify("user-1")
+
+        verify(exactly = 0) { analytics.flush() }
+    }
+
+    /** Makes the mock's switch behave like the real property: a write is seen by later reads. */
+    private fun stubDataCollectionSwitch(analytics: Analytics, initiallyEnabled: Boolean) {
+        var enabled = initiallyEnabled
+        every { analytics.dataCollectionEnabled } answers { enabled }
+        every { analytics.dataCollectionEnabled = any() } answers { enabled = firstArg() }
+    }
+
     private fun newMockAnalytics(
         appContext: Context,
         userId: String?,
@@ -498,6 +661,7 @@ class HightouchPushTest {
             // A relaxed mock returns false for Booleans; register() gates the heartbeat stamp
             // on enabled, so mirror the real default.
             every { it.enabled } returns true
+            stubDataCollectionSwitch(it, initiallyEnabled = true)
             // setDeviceToken does `find(DeviceToken::class) as DeviceToken`. With a relaxed mock,
             // find() returns a generic Plugin mock from MockK's classloader; the cast then fails
             // with ClassCastException under Robolectric's separate classloader. Force null so

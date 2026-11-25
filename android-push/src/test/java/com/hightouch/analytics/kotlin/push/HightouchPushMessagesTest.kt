@@ -1,8 +1,11 @@
+@file:OptIn(InternalHightouchApi::class)
+
 package com.hightouch.analytics.kotlin.push
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.hightouch.analytics.kotlin.core.Analytics
+import com.hightouch.analytics.kotlin.core.InternalHightouchApi
 import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.push.messages.FakeTransport
 import com.hightouch.analytics.kotlin.push.messages.HightouchMessages
@@ -199,5 +202,24 @@ class HightouchPushMessagesTest {
 
         assertEquals(1, transport.requestCount)
         assertEquals(listOf("flush", "fetch"), order)
+    }
+
+    @Test
+    fun `turning data collection on flushes the token registration and syncs messages`() {
+        var enabled = false
+        every { analytics.dataCollectionEnabled } answers { enabled }
+        every { analytics.dataCollectionEnabled = any() } answers { enabled = firstArg() }
+        initialize()
+        HightouchPush.register("fcm-token")
+        HightouchPush.identify("alice")
+        settle()
+        assertEquals(0, transport.requestCount)
+        assertTrue(order.isEmpty())
+
+        HightouchPush.setDataCollectionEnabled(true)
+
+        assertTrue(awaitMain { transport.requestCount == 1 })
+        assertEquals(listOf("flush", "fetch"), order)
+        assertEquals("alice", transport.requests.single().headers["x-hightouch-user-id"])
     }
 }

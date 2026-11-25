@@ -457,8 +457,8 @@ object HightouchMessages {
     /**
      * Fetches the latest messages from the server and reconciles the local cache.
      *
-     * Completes with [HightouchSyncOutcome.Unchanged] and makes no network call when there's no
-     * user, an anonymous user (whose inbox is always empty), no store, or no registered FCM token.
+     * Completes with [HightouchSyncOutcome.Unchanged] and makes no network call when data
+     * collection is off (see `HightouchPush.setDataCollectionEnabled`), or there's no user, an anonymous user (whose inbox is always empty), no store, or no registered FCM token.
      * [completion] runs on the main thread. `force = true` bypasses
      * [HightouchMessagesConfig.foregroundSyncCooldownMillis].
      */
@@ -488,6 +488,15 @@ object HightouchMessages {
      * like [identityDidChange]: the gateway links the token asynchronously after registration.
      */
     internal fun deviceTokenDidChange() {
+        syncInternal(force = false, updatesCooldown = false, completion = null)
+    }
+
+    /**
+     * Called by `HightouchPush.setDataCollectionEnabled` when collection turns on: syncs attempted
+     * while it was off made no fetch. Unforced and doesn't stamp the cooldown, like
+     * [identityDidChange]: the token is re-registered at the same moment.
+     */
+    internal fun dataCollectionDidEnable() {
         syncInternal(force = false, updatesCooldown = false, completion = null)
     }
 

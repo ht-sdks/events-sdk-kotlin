@@ -13,6 +13,7 @@ import com.hightouch.analytics.kotlin.core.platform.plugins.logger.*
 import com.hightouch.analytics.kotlin.core.utilities.JsonAnySerializer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.Json.Default.decodeFromJsonElement
@@ -33,6 +34,7 @@ import kotlin.reflect.KClass
  * @property networkIODispatcher coroutine dispatcher that runs the network tasks
  * @property fileIODispatcher coroutine dispatcher that runs the file related tasks
  */
+@OptIn(InternalHightouchApi::class)
 open class Analytics protected constructor(
     val configuration: Configuration,
     coroutineConfig: CoroutineConfiguration,
@@ -48,13 +50,45 @@ open class Analytics protected constructor(
         configuration.storageProvider.createStorage(this, configuration.application!!)
     }
 
+    @Volatile
     internal var userInfo: UserInfo = UserInfo.defaultState(storage)
+
+    private val dataCollectionPersistMutex = Mutex()
 
     var enabled = true
         set(value) {
             field = value
             analyticsScope.launch(analyticsDispatcher) {
                 store.dispatch(System.ToggleEnabledAction(value), System::class)
+            }
+        }
+
+    /**
+     * Whether events are collected. While `false`, [process] drops every event at call time; the
+     * upload pipeline keeps running, so events tracked earlier still upload.
+     *
+     * Starts from the choice stored on this device, or from
+     * [Configuration.dataCollectionEnabledByDefault] when none is stored. Setting it stores the
+     * choice, so it survives restarts.
+     */
+    @InternalHightouchApi
+    @Volatile
+    var dataCollectionEnabled: Boolean =
+        storage.read(Storage.Constants.DataCollectionEnabled)?.toBooleanStrictOrNull()
+            ?: configuration.dataCollectionEnabledByDefault
+        set(value) {
+            field = value
+            analyticsScope.launch(fileIODispatcher) {
+                dataCollectionPersistMutex.withLock {
+                    try {
+                        val serialized = dataCollectionEnabled.toString()
+                        if (storage.read(Storage.Constants.DataCollectionEnabled) != serialized) {
+                            storage.write(Storage.Constants.DataCollectionEnabled, serialized)
+                        }
+                    } catch (e: Exception) {
+                        reportInternalError(e)
+                    }
+                }
             }
         }
 
@@ -225,6 +259,11 @@ open class Analytics protected constructor(
         analyticsScope.launch(analyticsDispatcher) {
             store.dispatch(UserInfo.SetUserIdAndTraitsAction(userId, traits), UserInfo::class)
         }
+        if (!dataCollectionEnabled) {
+            // The identify event is dropped below, so UserInfoPlugin never applies it. Without
+            // this, userId() and later events would keep the previous user.
+            userInfo = userInfo.copy(userId = userId, traits = traits)
+        }
         val event = IdentifyEvent(userId = userId, traits = traits)
         process(event, enrichment)
     }
@@ -298,6 +337,10 @@ open class Analytics protected constructor(
     fun identify(traits: JsonObject = emptyJsonObject, enrichment: EnrichmentClosure? = null) {
         analyticsScope.launch(analyticsDispatcher) {
             store.dispatch(UserInfo.SetTraitsAction(traits), UserInfo::class)
+        }
+        if (!dataCollectionEnabled) {
+            // See identify(userId, traits).
+            userInfo = userInfo.copy(traits = traits)
         }
         val event = IdentifyEvent(
             userId = "", // using "" for userId, which will get filled down the pipe
@@ -515,6 +558,7 @@ open class Analytics protected constructor(
 
     fun process(event: BaseEvent, enrichment: EnrichmentClosure? = null) {
         if (!enabled) return
+        if (!dataCollectionEnabled) return
 
         event.applyBaseData(enrichment)
 

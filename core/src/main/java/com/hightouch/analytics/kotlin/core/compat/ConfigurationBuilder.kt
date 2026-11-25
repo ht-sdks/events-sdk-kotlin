@@ -37,5 +37,7 @@ class ConfigurationBuilder (writeKey: String) {
 
     fun setRequestFactory(requestFactory: RequestFactory) = apply { configuration.requestFactory = requestFactory }
 
+    fun setDataCollectionEnabledByDefault(dataCollectionEnabledByDefault: Boolean) = apply { configuration.dataCollectionEnabledByDefault = dataCollectionEnabledByDefault }
+
     fun build() = configuration
 }

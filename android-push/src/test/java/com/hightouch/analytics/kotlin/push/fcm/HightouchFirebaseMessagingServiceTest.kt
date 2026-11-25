@@ -1,4 +1,8 @@
+@file:OptIn(InternalHightouchApi::class)
+
 package com.hightouch.analytics.kotlin.push.fcm
+
+import com.hightouch.analytics.kotlin.core.InternalHightouchApi
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
@@ -121,6 +125,7 @@ class HightouchFirebaseMessagingServiceTest {
             // A relaxed mock returns false for Booleans; register() gates the heartbeat stamp
             // on enabled, so mirror the real default.
             every { it.enabled } returns true
+            every { it.dataCollectionEnabled } returns true
             // See HightouchPushTest.newMockAnalytics — keeps setDeviceToken's relaxed-mock cast
             // from blowing up under Robolectric's classloader.
             every { it.find(DeviceToken::class) } returns null

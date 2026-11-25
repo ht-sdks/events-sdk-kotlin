@@ -39,7 +39,8 @@ interface Storage {
         AppBuild("hightouch.app.build"),
         LegacyAppBuild("build"),
         DeviceId("hightouch.device.id"),
-        RetryState("hightouch.retry.state")
+        RetryState("hightouch.retry.state"),
+        DataCollectionEnabled("hightouch.dataCollectionEnabled")
     }
 
     /**
