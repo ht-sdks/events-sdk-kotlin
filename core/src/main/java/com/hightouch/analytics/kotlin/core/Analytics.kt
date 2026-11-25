@@ -13,6 +13,7 @@ import com.hightouch.analytics.kotlin.core.platform.plugins.logger.*
 import com.hightouch.analytics.kotlin.core.utilities.JsonAnySerializer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.Json.Default.decodeFromJsonElement
@@ -49,7 +50,10 @@ open class Analytics protected constructor(
         configuration.storageProvider.createStorage(this, configuration.application!!)
     }
 
+    @Volatile
     internal var userInfo: UserInfo = UserInfo.defaultState(storage)
+
+    private val dataCollectionPersistMutex = Mutex()
 
     var enabled = true
         set(value) {
@@ -74,7 +78,18 @@ open class Analytics protected constructor(
             ?: configuration.dataCollectionEnabledByDefault
         set(value) {
             field = value
-            storage.writePrefs(Storage.Constants.DataCollectionEnabled, value.toString())
+            analyticsScope.launch(fileIODispatcher) {
+                dataCollectionPersistMutex.withLock {
+                    try {
+                        val serialized = dataCollectionEnabled.toString()
+                        if (storage.read(Storage.Constants.DataCollectionEnabled) != serialized) {
+                            storage.write(Storage.Constants.DataCollectionEnabled, serialized)
+                        }
+                    } catch (e: Exception) {
+                        reportInternalError(e)
+                    }
+                }
+            }
         }
 
     internal var forceRunningJob: Job? = null
@@ -247,8 +262,7 @@ open class Analytics protected constructor(
         if (!dataCollectionEnabled) {
             // The identify event is dropped below, so UserInfoPlugin never applies it. Without
             // this, userId() and later events would keep the previous user.
-            userInfo.userId = userId
-            userInfo.traits = traits
+            userInfo = userInfo.copy(userId = userId, traits = traits)
         }
         val event = IdentifyEvent(userId = userId, traits = traits)
         process(event, enrichment)
@@ -326,7 +340,7 @@ open class Analytics protected constructor(
         }
         if (!dataCollectionEnabled) {
             // See identify(userId, traits).
-            userInfo.traits = traits
+            userInfo = userInfo.copy(traits = traits)
         }
         val event = IdentifyEvent(
             userId = "", // using "" for userId, which will get filled down the pipe

@@ -533,6 +533,13 @@ class HightouchPushTest {
     }
 
     @Test
+    fun `isDataCollectionEnabled before initialize throws`() {
+        assertThrows(IllegalStateException::class.java) {
+            HightouchPush.isDataCollectionEnabled
+        }
+    }
+
+    @Test
     fun `turning data collection off stores the choice and sends nothing`() {
         HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
         HightouchPush.register("fcm-token-xyz")
@@ -603,6 +610,33 @@ class HightouchPushTest {
 
         assertTrue(HightouchPush.isDataCollectionEnabled)
         verify(exactly = 0) { analytics.track(any<String>(), any<JsonObject>(), any()) }
+    }
+
+    @Test
+    fun `heartbeat while off skips unchanged token but persists a rotated token`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.setDataCollectionEnabled(false)
+        HightouchPush.register("fcm-token-1")
+        clearMocks(analytics, answers = false)
+
+        assertFalse(HightouchPush.registerIfDue("fcm-token-1"))
+        verify(exactly = 0) { analytics.track(any<String>(), any<JsonObject>(), any()) }
+
+        assertTrue(HightouchPush.registerIfDue("fcm-token-2"))
+        assertEquals("fcm-token-2", PushPreferences(context).token)
+        assertEquals(0L, PushPreferences(context).lastUploadedAtMillis)
+    }
+
+    @Test
+    fun `identify while off does not flush`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        HightouchPush.setDataCollectionEnabled(false)
+        clearMocks(analytics, answers = false)
+
+        HightouchPush.identify("user-1")
+
+        verify(exactly = 0) { analytics.flush() }
     }
 
     /** Makes the mock's switch behave like the real property: a write is seen by later reads. */

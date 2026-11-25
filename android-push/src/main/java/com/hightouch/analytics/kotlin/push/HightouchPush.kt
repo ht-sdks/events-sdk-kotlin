@@ -229,6 +229,10 @@ object HightouchPush {
     @Synchronized
     internal fun registerIfDue(token: String): Boolean {
         val prefs = _prefs ?: return false
+        val analytics = _analytics ?: return false
+        if (!analytics.dataCollectionEnabled && token == prefs.token && prefs.lastUploadedAtMillis == 0L) {
+            return false
+        }
         val intervalMillis = _config?.tokenUploadIntervalMillis
             ?: HightouchPushConfig.DEFAULT_TOKEN_UPLOAD_INTERVAL_MILLIS
         if (shouldUploadToken(
@@ -306,7 +310,13 @@ object HightouchPush {
         // racing the token fetch) skipped the fetch for want of one, and nothing else retries it
         // while foreground sync is off. [identify] re-registers an unchanged token and syncs
         // itself, so it doesn't land here; an anonymous user's inbox is always empty.
-        if (token != previousToken && capturedUserId != null && HightouchMessages.isInitialized) {
+        if (
+            token != previousToken &&
+            capturedUserId != null &&
+            analytics.enabled &&
+            analytics.dataCollectionEnabled &&
+            HightouchMessages.isInitialized
+        ) {
             analytics.flush()
             HightouchMessages.deviceTokenDidChange()
         }
@@ -333,7 +343,8 @@ object HightouchPush {
             logout()
         }
         _currentUserId = userId
-        analyticsOrError().identify(userId, traits)
+        val analytics = analyticsOrError()
+        analytics.identify(userId, traits)
         // Re-fire the token event so the new user shows up on the registration. When the user is
         // unchanged (e.g. an app that identifies on every launch), go through the heartbeat gate
         // instead so repeat identifies don't emit duplicate "registered" events.
@@ -342,7 +353,7 @@ object HightouchPush {
         // only after the re-registration is tracked and flushed. It doesn't wait for the upload
         // itself, which has no completion signal, and a logout (above) never syncs: the new
         // anonymous id's inbox is always empty.
-        if (uploaded) analyticsOrError().flush()
+        if (uploaded && analytics.enabled && analytics.dataCollectionEnabled) analytics.flush()
         HightouchMessages.identityDidChange()
     }
 
@@ -382,7 +393,11 @@ object HightouchPush {
         analytics.reset()
     }
 
-    /** Whether the SDK collects data. See [setDataCollectionEnabled]. */
+    /**
+     * Whether the SDK collects data. See [setDataCollectionEnabled].
+     *
+     * @throws IllegalStateException if called before [initialize].
+     */
     @JvmStatic
     val isDataCollectionEnabled: Boolean
         @Synchronized get() = analyticsOrError().dataCollectionEnabled

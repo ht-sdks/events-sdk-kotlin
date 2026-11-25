@@ -8,6 +8,10 @@ import com.hightouch.analytics.kotlin.core.utils.mockHTTPClient
 import com.hightouch.analytics.kotlin.core.utils.testAnalytics
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -63,8 +67,21 @@ class DataCollectionTests {
         analytics.track("dropped")
         analytics.identify("user-1")
         analytics.screen("Home")
+        analytics.group("group-1")
+        analytics.alias("user-2")
 
         assertFalse(analytics.dataCollectionEnabled)
+        assertTrue(processedEvents.isEmpty())
+    }
+
+    @Test
+    fun `identify with traits only while off records traits locally without sending an event`() {
+        val analytics = newAnalytics(dataCollectionEnabledByDefault = false)
+        val traits = buildJsonObject { put("plan", "pro") }
+
+        analytics.identify(traits)
+
+        assertEquals("pro", analytics.traits()?.get("plan")?.jsonPrimitive?.content)
         assertTrue(processedEvents.isEmpty())
     }
 
@@ -135,6 +152,40 @@ class DataCollectionTests {
         analytics.track("dropped")
 
         assertTrue(processedEvents.isEmpty())
+    }
+
+    @Test
+    fun `a pre-switch event left in tmp rolls over after restart while collection is off`() = runTest(testDispatcher) {
+        val first = newAnalytics()
+        first.storage.write(Storage.Constants.Events, """{"type":"track","event":"before-restart"}""")
+        first.dataCollectionEnabled = false
+        first.storage.close()
+
+        val restarted = newAnalytics(dataCollectionEnabledByDefault = true)
+        assertFalse(restarted.dataCollectionEnabled)
+        assertTrue(restarted.pendingUploads().isEmpty())
+
+        restarted.storage.rollover()
+
+        val uploads = restarted.pendingUploads()
+        assertEquals(1, uploads.size)
+        val contents = restarted.storage.readAsStream(uploads.single())!!.bufferedReader().use { it.readText() }
+        assertTrue(contents.contains("before-restart"))
+    }
+
+    @Test
+    fun `a pre-off identify replayed after turning collection off does not overwrite the newer user`() {
+        val analytics = newAnalytics()
+        val staleIdentify = IdentifyEvent(userId = "user-1", traits = emptyJsonObject).apply {
+            anonymousId = analytics.anonymousId()
+        }
+
+        analytics.dataCollectionEnabled = false
+        analytics.identify("user-2")
+        analytics.find(com.hightouch.analytics.kotlin.core.platform.plugins.UserInfoPlugin::class)!!
+            .execute(staleIdentify)
+
+        assertEquals("user-2", analytics.userId())
     }
 
     private companion object {

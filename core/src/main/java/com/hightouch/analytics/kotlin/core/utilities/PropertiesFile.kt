@@ -20,6 +20,7 @@ class PropertiesFile(val file: File) : KVS {
     /**
      * Check if underlying file exists, and load properties if true
      */
+    @Synchronized
     fun load() {
         if (file.exists()) {
             FileInputStream(file).use {
@@ -32,46 +33,55 @@ class PropertiesFile(val file: File) : KVS {
         }
     }
 
+    @Synchronized
     fun save() {
         FileOutputStream(file).use {
             properties.store(it, null)
         }
     }
 
+    @Synchronized
     override fun get(key: String, defaultVal: Int): Int {
         return properties.getProperty(key, "").toIntOrNull() ?: defaultVal
     }
 
+    @Synchronized
     override fun get(key: String, defaultVal: String?): String? {
         return properties.getProperty(key, defaultVal)
     }
 
+    @Synchronized
     override fun put(key: String, value: Int): Boolean {
         properties.setProperty(key, value.toString())
         save()
         return true
     }
 
+    @Synchronized
     override fun put(key: String, value: String): Boolean {
         properties.setProperty(key, value)
         save()
         return true
     }
 
+    @Synchronized
     fun putString(key: String, value: String): Boolean {
         properties.setProperty(key, value)
         save()
         return true
     }
 
+    @Synchronized
     fun getString(key: String, defaultVal: String?): String? =
         properties.getProperty(key, defaultVal)
 
+    @Synchronized
     override fun remove(key: String): Boolean {
         properties.remove(key)
         save()
         return true
     }
 
+    @Synchronized
     override fun contains(key: String) = properties.containsKey(key)
 }

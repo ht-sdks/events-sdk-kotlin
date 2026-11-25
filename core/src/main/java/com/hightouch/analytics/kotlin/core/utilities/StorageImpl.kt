@@ -176,7 +176,17 @@ open class StorageImpl(
     }
 
     private fun performRollover() {
-        if (!eventStream.isOpened) return
+        if (!eventStream.isOpened) {
+            // Finalize an un-rolled .tmp batch left by a prior process (for example when data
+            // collection is off after restart and no new event ever opens the stream).
+            val pendingPath = eventStream.read().firstOrNull { File(it).name == currentFile } ?: return
+            eventStream.openOrCreate(currentFile)
+            if (eventStream.length <= begin.length) {
+                eventStream.close()
+                eventStream.remove(pendingPath)
+                return
+            }
+        }
 
         eventStream.write(end)
         eventStream.finishAndClose {
