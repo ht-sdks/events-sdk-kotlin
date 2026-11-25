@@ -28,6 +28,12 @@ import kotlinx.serialization.json.contentOrNull
  * A `Json` element's `json` value is a parsed JSON object or array, never a string, so read it
  * with `jsonObject` or `jsonArray`. The store does not keep the key order of JSON objects. Look
  * elements up by `tag` and skip any `elementType` the app does not handle.
+ *
+ * Treat every tag as optional. A field with no value and no default has no element. A template
+ * can also group fields under a Boolean condition that is set per message. While the condition
+ * is on, the list holds an element for the condition (`elementType` `BooleanCondition`, `text`
+ * `"true"`) followed by one element for each of its fields. While it is off, the list holds
+ * neither the condition's element nor its fields' elements.
  */
 @Serializable(with = HightouchMessageSerializer::class)
 data class HightouchMessage(
