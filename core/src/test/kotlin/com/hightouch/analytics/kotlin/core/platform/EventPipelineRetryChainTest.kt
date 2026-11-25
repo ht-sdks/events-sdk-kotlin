@@ -49,6 +49,20 @@ class EventPipelineRetryChainTest {
         clearPersistentStorage(writeKey)
     }
 
+    private fun EventPipeline.flushAndRun(event: BaseEvent? = null) {
+        event?.let { put(it) }
+        flush()
+        testScope.testScheduler.runCurrent()
+    }
+
+    private fun presentOriginalFileFirst(): String {
+        val file = parseFilePaths(storage.read(Storage.Constants.Events)).single()
+        every { storage.read(Storage.Constants.Events) } answers {
+            parseFilePaths(callOriginal()).sortedBy { it != file }.joinToString()
+        }
+        return file
+    }
+
     private fun createTestEvent(name: String): ScreenEvent {
         return ScreenEvent(name, "", emptyJsonObject).apply {
             messageId = "msg-${UUID.randomUUID()}"
@@ -143,32 +157,23 @@ class EventPipelineRetryChainTest {
         pipeline.start()
         try {
             val first = createTestEvent("first").apply { messageId = "A" }
-            pipeline.put(first)
-            pipeline.flush()
-            testScope.testScheduler.runCurrent()
+            pipeline.flushAndRun(first)
             verify(exactly = 1) { mockHttpClient.upload(any()) }
 
-            val firstFile = parseFilePaths(storage.read(Storage.Constants.Events)).single()
-            every { storage.read(Storage.Constants.Events) } answers {
-                parseFilePaths(callOriginal()).sortedBy { it != firstFile }.joinToString()
-            }
+            presentOriginalFileFirst()
             fakeTime.setTime(fakeTime.currentTimeMillis() + 60_000)
-            pipeline.flush()
-            testScope.testScheduler.runCurrent()
+            pipeline.flushAndRun()
             verify(exactly = 2) { mockHttpClient.upload(any()) }
 
             val deadline = fakeTime.currentTimeMillis() + 60_000
             fakeTime.setTime(deadline - 1)
             val second = createTestEvent("second").apply { messageId = "B" }
-            pipeline.put(second)
-            pipeline.flush()
-            testScope.testScheduler.runCurrent()
+            pipeline.flushAndRun(second)
             assertEquals(2, parseFilePaths(storage.read(Storage.Constants.Events)).size)
             verify(exactly = 2) { mockHttpClient.upload(any()) }
 
             fakeTime.setTime(deadline)
-            pipeline.flush()
-            testScope.testScheduler.runCurrent()
+            pipeline.flushAndRun()
             verify(exactly = 4) { mockHttpClient.upload(any()) }
             val payloads = body.toString("UTF-8")
             assertTrue(payloads.indexOf(second.messageId) in 0 until payloads.indexOf(first.messageId), "Expected ${second.messageId} before ${first.messageId} in $payloads")
@@ -190,32 +195,22 @@ class EventPipelineRetryChainTest {
         pipeline.start()
         try {
             val failing = createTestEvent("first")
-            pipeline.put(failing)
-            pipeline.flush()
-            testScope.testScheduler.runCurrent()
-            val first = parseFilePaths(storage.read(Storage.Constants.Events)).single()
+            pipeline.flushAndRun(failing)
+            val first = presentOriginalFileFirst()
 
             fakeTime.setTime(fakeTime.currentTimeMillis() + 10_000)
-            pipeline.flush()
-            testScope.testScheduler.runCurrent()
+            pipeline.flushAndRun()
             assertEquals(2, storage.loadRetryState().batchMetadata.getValue(first).failureCount)
 
-            // Present the waiting file first regardless of filesystem enumeration order.
-            every { storage.read(Storage.Constants.Events) } answers {
-                parseFilePaths(callOriginal()).sortedBy { it != first }.joinToString()
-            }
             val healthy = createTestEvent("healthy")
-            pipeline.put(healthy)
-            pipeline.flush()
-            testScope.testScheduler.runCurrent()
+            pipeline.flushAndRun(healthy)
             verify(exactly = 3) { mockHttpClient.upload(any()) }
             assertTrue(body.toString("UTF-8").contains(healthy.messageId))
             body.reset()
             assertEquals(listOf(first), parseFilePaths(storage.read(Storage.Constants.Events)))
 
             fakeTime.setTime(fakeTime.currentTimeMillis() + 10_000)
-            pipeline.flush()
-            testScope.testScheduler.runCurrent()
+            pipeline.flushAndRun()
             verify(exactly = 4) { mockHttpClient.upload(any()) }
             assertTrue(body.toString("UTF-8").contains(failing.messageId))
             assertTrue(parseFilePaths(storage.read(Storage.Constants.Events)).isEmpty())
