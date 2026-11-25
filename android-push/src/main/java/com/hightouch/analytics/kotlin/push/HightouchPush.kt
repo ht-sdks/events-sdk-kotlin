@@ -47,7 +47,7 @@ object HightouchPush {
     private var _config: HightouchPushConfig? = null
     private var _prefs: PushPreferences? = null
     private var _currentUserId: String? = null
-    private var _deviceId: String? = null
+    private var _deviceIdStore: DeviceIdStore? = null
     private var _lifecycleObserver: DefaultLifecycleObserver? = null
 
     /** The currently identified user id, or null if none. */
@@ -119,7 +119,10 @@ object HightouchPush {
         _config = config
         _prefs = PushPreferences(appContext)
         _currentUserId = analytics.userId()
-        _deviceId = DeviceIdStore(appContext).getOrCreate()
+        if (_deviceIdStore == null) {
+            _deviceIdStore = DeviceIdStore(appContext)
+        }
+        _deviceIdStore?.getOrCreate()
         // If we have a cached token from a prior process, make it visible on every event.
         _prefs?.token?.let { analytics.setDeviceToken(it) }
         // Proactively pull the current FCM token. `onNewToken` only fires on first-mint/rotation,
@@ -369,10 +372,11 @@ object HightouchPush {
     internal val cepAppId: String @Synchronized get() = _config?.appId.orEmpty()
 
     /**
-     * Internal accessor for [CepEventTracking] to read this install's device id. Unlike the user
-     * and the token, it is unaffected by [identify] and [logout].
+     * Internal accessor for [CepEventTracking] to read this install's device id, or `null` while
+     * the stored file cannot be read. Unlike the user and the token, it is unaffected by
+     * [identify] and [logout].
      */
-    internal val cepDeviceId: String? @Synchronized get() = _deviceId
+    internal val cepDeviceId: String? @Synchronized get() = _deviceIdStore?.getOrCreate()
 
     /** Internal accessor for silent-push delivery to read the configured listener. */
     internal val cepSilentPushListener: HightouchSilentPushListener?
@@ -411,7 +415,7 @@ object HightouchPush {
         _config = null
         _prefs = null
         _currentUserId = null
-        _deviceId = null
+        _deviceIdStore = null
         _lifecycleObserver?.let { observer ->
             try {
                 ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)

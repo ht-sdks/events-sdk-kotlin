@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -77,6 +78,8 @@ class CepEventTrackingTest {
         assertEquals("push", base["channel_type"]?.jsonPrimitive?.content)
         assertEquals("push_sdk", base["_ht_cep_source"]?.jsonPrimitive?.content)
         assertEquals("app-1", base["app_id"]?.jsonPrimitive?.content)
+        assertNotNull(HightouchPush.cepDeviceId)
+        assertEquals(HightouchPush.cepDeviceId, base["device_id"]?.jsonPrimitive?.content)
     }
 
     @Test
@@ -85,6 +88,8 @@ class CepEventTrackingTest {
         assertEquals("in_app", base["channel_type"]?.jsonPrimitive?.content)
         assertEquals("in_app_sdk", base["_ht_cep_source"]?.jsonPrimitive?.content)
         assertEquals("app-1", base["app_id"]?.jsonPrimitive?.content)
+        assertNotNull(HightouchPush.cepDeviceId)
+        assertEquals(HightouchPush.cepDeviceId, base["device_id"]?.jsonPrimitive?.content)
     }
 
     @Test
@@ -143,6 +148,8 @@ class CepEventTrackingTest {
         assertEquals("c1", props["campaign_id"]?.jsonPrimitive?.content)
         assertEquals("push", props["channel_type"]?.jsonPrimitive?.content)
         assertEquals("app-1", props["app_id"]?.jsonPrimitive?.content)
+        assertNotNull(HightouchPush.cepDeviceId)
+        assertEquals(HightouchPush.cepDeviceId, props["device_id"]?.jsonPrimitive?.content)
     }
 
     @Test

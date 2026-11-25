@@ -210,6 +210,24 @@ class HightouchPushTest {
     }
 
     @Test
+    fun `device_id recovers after stored file becomes readable again`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        val stored = HightouchPush.cepDeviceId!!
+        val file = File(context.noBackupFilesDir, DeviceIdStore.FILE_NAME)
+        val backup = File(context.noBackupFilesDir, "${DeviceIdStore.FILE_NAME}.bak")
+        assertTrue(file.renameTo(backup))
+        assertTrue(file.mkdir())
+        HightouchPush.resetForTesting()
+
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        assertNull(HightouchPush.cepDeviceId)
+
+        assertTrue(file.delete())
+        assertTrue(backup.renameTo(file))
+        assertEquals(stored, HightouchPush.cepDeviceId)
+    }
+
+    @Test
     fun `logout is a no-op when no user is currently identified`() {
         HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
         HightouchPush.register("fcm-token-xyz")
