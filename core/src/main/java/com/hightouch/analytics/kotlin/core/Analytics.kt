@@ -118,7 +118,6 @@ open class Analytics protected constructor(
         Telemetry.increment(Telemetry.INVOKE_METRIC) {
             it["message"] = "configured"
             it["apihost"] = configuration.apiHost
-            it["cdnhost"] = configuration.cdnHost
             it["flush"] =
                 "at:${configuration.flushAt} int:${configuration.flushInterval} pol:${configuration.flushPolicies.count()}"
             it["config"] = "seg:${configuration.autoAddSegmentDestination}"
@@ -140,7 +139,11 @@ open class Analytics protected constructor(
                 add(SegmentDestination())
             }
 
-            checkSettings()
+            // Configure plugins with cached or default local settings, then release the startup queue.
+            store.currentState(System::class)?.settings?.let { settings ->
+                update(settings)
+            }
+            resumeEventProcessing()
         }
     }
 

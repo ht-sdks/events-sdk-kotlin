@@ -2,18 +2,14 @@ package com.hightouch.analytics.kotlin.core
 
 import com.hightouch.analytics.kotlin.core.platform.DestinationPlugin
 import com.hightouch.analytics.kotlin.core.platform.Plugin
-import com.hightouch.analytics.kotlin.core.platform.plugins.logger.log
 import com.hightouch.analytics.kotlin.core.utilities.LenientJson
 import com.hightouch.analytics.kotlin.core.utilities.safeJsonObject
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.serializer
-import java.io.BufferedReader
-import java.net.URL
 
 @Serializable
 data class Settings(
@@ -79,67 +75,15 @@ fun Analytics.manuallyEnableDestination(plugin: DestinationPlugin) {
 
 
 /**
- * Make analytics client call into Segment's settings API, to refresh certain configurations.
+ * Remote settings are no longer fetched. Propagates local settings (cached or default) to plugins
+ * and releases the startup queue without making any network request.
  */
+@Deprecated(
+    "Remote settings are not fetched. Plugins are configured from local settings."
+)
 suspend fun Analytics.checkSettings() {
-    val writeKey = configuration.writeKey
-    val cdnHost = configuration.cdnHost
-
-    pauseEventProcessing()
-
-    val settingsObj = withContext(networkIODispatcher) {
-        log("Fetching settings on ${Thread.currentThread().name}")
-        return@withContext fetchSettings(writeKey, cdnHost)
+    store.currentState(System::class)?.settings?.let { settings ->
+        update(settings)
     }
-
-    // Only apply settings when the fetch actually succeeded. On failure (e.g. local dev where
-    // the collector doesn't serve /settings) `fetchSettings` returns null; we must NOT fall back
-    // to the store's seeded default settings and run `update()`, because those defaults carry the
-    // production apiHost (State.defaultState -> DEFAULT_API_HOST) and `SegmentDestination.update()`
-    // would clobber a deliberately-configured apiHost (e.g. a local collector), sending uploads to
-    // production and failing with 401. This mirrors analytics-swift, which only calls update() in
-    // the success branch of its settings fetch.
-    settingsObj?.let {
-        log("Dispatching update settings on ${Thread.currentThread().name}")
-        store.dispatch(System.UpdateSettingsAction(settingsObj), System::class)
-
-        store.currentState(System::class)?.let { system ->
-            system.settings?.let { settings ->
-                log("Propagating settings on ${Thread.currentThread().name}")
-                update(settings)
-            }
-        }
-    }
-
-    // we're good to go back to a running state.
     resumeEventProcessing()
-}
-
-internal fun Analytics.fetchSettings(
-    writeKey: String,
-    cdnHost: String
-): Settings? = try {
-    val connection = HTTPClient(writeKey, this.configuration.requestFactory).settings(cdnHost)
-    val settingsString =
-        connection.inputStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
-    log("Fetched Settings: $settingsString")
-    LenientJson.decodeFromString(settingsString)
-} catch (ex: Exception) {
-    reportErrorWithMetrics(
-        this,
-        AnalyticsError.SettingsFail(
-            AnalyticsError.NetworkUnknown(
-                URL("https://$cdnHost/projects/$writeKey/settings"),
-                ex
-            )
-        ),
-        "Failed to fetch settings",
-        Telemetry.INVOKE_ERROR_METRIC,
-        ex.stackTraceToString()
-    ) {
-        it["error"] = ex.toString()
-        it["writekey"] = writeKey
-        it["message"] = "Error retrieving settings"
-    }
-    null
 }
