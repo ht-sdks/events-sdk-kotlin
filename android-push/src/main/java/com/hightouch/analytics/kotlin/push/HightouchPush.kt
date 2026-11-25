@@ -296,7 +296,7 @@ object HightouchPush {
                 put("platform", "android")
             },
             enrichment = { event ->
-                event?.also { e -> capturedUserId?.let { e.userId = it } }
+                event?.also { e -> e.userId = capturedUserId.orEmpty() }
             },
         )
         if (analytics.enabled && analytics.dataCollectionEnabled) {
@@ -434,7 +434,7 @@ object HightouchPush {
                 },
                 enrichment = { event ->
                     event?.also {
-                        if (outgoingUserId != null) it.userId = outgoingUserId
+                        it.userId = outgoingUserId.orEmpty()
                         it.anonymousId = outgoingAnonymousId
                     }
                 },

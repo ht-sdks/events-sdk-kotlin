@@ -706,15 +706,28 @@ class HightouchPushTest {
     fun `wipeData sends the deleted event and resets for an anonymous device`() {
         HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
         HightouchPush.register("fcm-token-xyz")
-        val deletedEvents = captureDeletedEvents()
+        val trackedProperties = mutableListOf<JsonObject>()
+        val enrichmentSlot = slot<EnrichmentClosure>()
+        every {
+            analytics.track("CEP Push Token Events", capture(trackedProperties), capture(enrichmentSlot))
+        } returns Unit
 
         HightouchPush.wipeData()
 
-        val deleted = deletedEvents.single() as TrackEvent
-        assertEquals("deleted", providerEventType(deleted))
-        assertEquals("fcm-token-xyz", deleted.properties["token"]?.jsonPrimitive?.content)
-        assertFalse(deleted.properties.containsKey("userId"))
+        val deleted = trackedProperties.single()
+        assertEquals("deleted", deleted["provider_event_type"]?.jsonPrimitive?.content)
+        assertEquals("fcm-token-xyz", deleted["token"]?.jsonPrimitive?.content)
+        assertFalse(deleted.containsKey("userId"))
         verify(exactly = 1) { analytics.reset() }
+
+        // A later identify before replay must not attribute this anonymous deletion to the new user.
+        val event = TrackEvent(properties = JsonObject(emptyMap()), event = "CEP Push Token Events").apply {
+            userId = "later-user"
+            anonymousId = "post-reset-anon"
+        }
+        val enriched = enrichmentSlot.captured(event) as TrackEvent
+        assertEquals("", enriched.userId)
+        assertEquals("anon-123", enriched.anonymousId)
     }
 
     @Test
@@ -737,6 +750,20 @@ class HightouchPushTest {
         val deletedEvents = captureDeletedEvents()
 
         HightouchPush.wipeData()
+        HightouchPush.wipeData()
+
+        assertEquals(1, deletedEvents.size)
+    }
+
+    @Test
+    fun `wipeData after a restart in the same off period sends nothing more`() {
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
+        HightouchPush.register("fcm-token-xyz")
+        val deletedEvents = captureDeletedEvents()
+
+        HightouchPush.wipeData()
+        HightouchPush.resetForTesting()
+        HightouchPush.initialize(analytics, HightouchPushConfig.Builder("app-1").build())
         HightouchPush.wipeData()
 
         assertEquals(1, deletedEvents.size)
@@ -810,7 +837,9 @@ class HightouchPushTest {
         assertEquals("registered", capturedProps.captured["provider_event_type"]?.jsonPrimitive?.content)
         assertEquals("fcm-token-xyz", capturedProps.captured["token"]?.jsonPrimitive?.content)
         assertFalse(capturedProps.captured.containsKey("userId"))
-        val event = TrackEvent(properties = JsonObject(emptyMap()), event = "CEP Push Token Events")
+        val event = TrackEvent(properties = JsonObject(emptyMap()), event = "CEP Push Token Events").apply {
+            userId = "later-user"
+        }
         assertEquals("", (enrichmentSlot.captured(event) as TrackEvent).userId)
     }
 

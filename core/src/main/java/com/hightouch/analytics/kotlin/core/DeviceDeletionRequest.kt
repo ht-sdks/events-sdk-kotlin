@@ -16,6 +16,6 @@ object DeviceDeletionRequest {
     internal fun matches(event: BaseEvent): Boolean {
         if (event !is TrackEvent || event.event != EVENT_NAME) return false
         val eventType = event.properties[EVENT_TYPE_PROPERTY] as? JsonPrimitive
-        return eventType?.content == EVENT_TYPE
+        return eventType?.isString == true && eventType.content == EVENT_TYPE
     }
 }
