@@ -108,11 +108,7 @@ open class StorageImpl(
     override fun read(key: Storage.Constants): String? {
         return when (key) {
             Storage.Constants.Events -> {
-                eventStream.read().filter { path ->
-                    val name = File(path).name
-                    name.substringBeforeLast('-') == writeKey &&
-                        name.substringAfterLast('-').toIntOrNull() != null
-                }.joinToString()
+                eventStream.read().filter { !it.endsWith(".$ext") }.joinToString()
             }
             else -> {
                 propertiesFile.get(key.rawVal, null)

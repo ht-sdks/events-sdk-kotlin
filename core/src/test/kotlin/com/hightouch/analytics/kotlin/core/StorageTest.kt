@@ -176,7 +176,7 @@ class StorageTest {
 
         @Test
         fun readTest() {
-            val files = listOf("test-1.tmp", "test-2", "different-3", "test-4")
+            val files = listOf("test1.tmp", "test2", "test3.tmp", "test4")
             every { stream.read() } returns files
             prefs.put(Storage.Constants.UserId.rawVal, "userId")
 
