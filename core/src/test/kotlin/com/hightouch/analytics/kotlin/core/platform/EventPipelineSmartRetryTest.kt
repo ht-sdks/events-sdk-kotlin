@@ -13,6 +13,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import java.util.*
 
 /**
@@ -109,6 +111,27 @@ class EventPipelineSmartRetryTest {
 
         // Verify: No upload attempted (rate limited)
         coVerify(exactly = 0) { mockHttpClient.upload(any()) }
+    }
+
+    @ParameterizedTest(name = "HTTP {0}, rate limiting={1}, backoff={2}")
+    @CsvSource("429, false, true", "408, true, false", "503, true, false")
+    fun `disabled retry handler removes the batch before the next flush`(
+        status: Int, rateLimiting: Boolean, backoff: Boolean
+    ) {
+        pipeline = createPipeline(HttpConfig(
+            rateLimitConfig = RateLimitConfig(enabled = rateLimiting),
+            backoffConfig = BackoffConfig(enabled = backoff)
+        ))
+        every { mockHttpClient.upload(any()) } throws HTTPException(status, "", "", mutableMapOf())
+        pipeline.start()
+        pipeline.put(createTestEvent("first"))
+        pipeline.flush()
+        testScope.testScheduler.runCurrent()
+        verify(exactly = 1) { storage.removeFile(any()) }
+
+        pipeline.flush()
+        testScope.testScheduler.runCurrent()
+        verify(exactly = 1) { mockHttpClient.upload(any()) }
     }
 
     @Test
