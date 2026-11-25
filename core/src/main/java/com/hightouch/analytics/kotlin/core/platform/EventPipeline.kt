@@ -161,6 +161,7 @@ open class EventPipeline(
     }
 
     private fun upload() = scope.launch(networkIODispatcher) {
+        var lastRateLimitedFile: String? = null
         uploadChannel.consumeEach {
             analytics.log("$logTag performing flush")
             withContext(fileIODispatcher) {
@@ -185,7 +186,10 @@ open class EventPipeline(
                 )
             }
             val fileUrlList = parseFilePaths(storage.read(Storage.Constants.Events))
-            for (url in fileUrlList) {
+            val start = lastRateLimitedFile?.let { fileUrlList.indexOf(it) + 1 } ?: 0
+            lastRateLimitedFile = null
+            for (offset in fileUrlList.indices) {
+                val url = fileUrlList[(start + offset) % fileUrlList.size]
                 // Load batch metadata and check if we should upload
                 val (decision, updatedState) = retryStateMachine.shouldUploadBatch(
                     retryState,
@@ -269,6 +273,8 @@ open class EventPipeline(
                 )
                 retryState = retryStateMachine.handleResponse(retryState, responseInfo)
                 
+                if (retryState.pipelineState == PipelineState.RATE_LIMITED) lastRateLimitedFile = url
+
                 // Persist updated retry state
                 withContext(fileIODispatcher) {
                     storage.saveRetryState(retryState)

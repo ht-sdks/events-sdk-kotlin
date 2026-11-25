@@ -134,29 +134,44 @@ class EventPipelineRetryChainTest {
         pipeline.stop()
     }
     @Test
-    fun `Retry-After holds both batch files until the source cooldown expires`() {
+    fun `repeated 429s yield to the next file after the source cooldown`() {
         val pipeline = createPipeline(HttpConfig(rateLimitConfig = RateLimitConfig(enabled = true)))
         val rateLimited = HTTPException(429, "", "", mutableMapOf("retry-after" to mutableListOf("60")))
-        every { mockHttpClient.upload(any()) } throws rateLimited andThen mockk<Connection>(relaxed = true)
+        val body = ByteArrayOutputStream()
+        val success = mockk<Connection>(relaxed = true) { every { outputStream } returns body }
+        every { mockHttpClient.upload(any()) } throws rateLimited andThenThrows rateLimited andThen success
         pipeline.start()
         try {
-            pipeline.put(createTestEvent("first"))
+            val first = createTestEvent("first").apply { messageId = "A" }
+            pipeline.put(first)
             pipeline.flush()
             testScope.testScheduler.runCurrent()
             verify(exactly = 1) { mockHttpClient.upload(any()) }
 
+            val firstFile = parseFilePaths(storage.read(Storage.Constants.Events)).single()
+            every { storage.read(Storage.Constants.Events) } answers {
+                parseFilePaths(callOriginal()).sortedBy { it != firstFile }.joinToString()
+            }
+            fakeTime.setTime(fakeTime.currentTimeMillis() + 60_000)
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            verify(exactly = 2) { mockHttpClient.upload(any()) }
+
             val deadline = fakeTime.currentTimeMillis() + 60_000
             fakeTime.setTime(deadline - 1)
-            pipeline.put(createTestEvent("second"))
+            val second = createTestEvent("second").apply { messageId = "B" }
+            pipeline.put(second)
             pipeline.flush()
             testScope.testScheduler.runCurrent()
             assertEquals(2, parseFilePaths(storage.read(Storage.Constants.Events)).size)
-            verify(exactly = 1) { mockHttpClient.upload(any()) }
+            verify(exactly = 2) { mockHttpClient.upload(any()) }
 
             fakeTime.setTime(deadline)
             pipeline.flush()
             testScope.testScheduler.runCurrent()
-            verify(exactly = 3) { mockHttpClient.upload(any()) }
+            verify(exactly = 4) { mockHttpClient.upload(any()) }
+            val payloads = body.toString("UTF-8")
+            assertTrue(payloads.indexOf(second.messageId) in 0 until payloads.indexOf(first.messageId), "Expected ${second.messageId} before ${first.messageId} in $payloads")
             assertTrue(parseFilePaths(storage.read(Storage.Constants.Events)).isEmpty())
         } finally {
             pipeline.stop()
