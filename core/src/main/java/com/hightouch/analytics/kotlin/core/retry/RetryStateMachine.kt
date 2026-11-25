@@ -178,16 +178,18 @@ class RetryStateMachine(
 
     /**
      * Returns true if an error response should result in deleting the batch file.
-     * In smart retry mode, only DROP-classified errors delete immediately.
+     * Smart retries retain the file only when the configured handler can retry it.
      */
     fun shouldDeleteBatch(statusCode: Int): Boolean {
         if (isLegacyMode) {
             return statusCode in 400..499 && statusCode != 408 && statusCode != 429
         }
         if (statusCode in 200..299) return true // Success: file can be removed
-        if (statusCode == 429 && config.rateLimitConfig.enabled) return false
+        // 429 with rate limit handling disabled: delete
+        if (statusCode == 429) return !config.rateLimitConfig.enabled
         val behavior = resolveStatusCodeBehavior(statusCode)
-        if (statusCode in 400..499 && statusCode != 408 && statusCode != 429 && !config.backoffConfig.enabled) return true
+        // Retryable error with backoff disabled: delete
+        if (behavior == RetryBehavior.RETRY && !config.backoffConfig.enabled) return true
         return behavior == RetryBehavior.DROP
     }
 
