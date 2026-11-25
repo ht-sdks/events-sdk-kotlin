@@ -13,6 +13,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.ByteArrayOutputStream
 import java.util.*
 
 /**
@@ -23,6 +24,7 @@ import java.util.*
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class EventPipelineRetryChainTest {
 
+    private val writeKey = "retry-chain-${UUID.randomUUID()}"
     private lateinit var analytics: Analytics
     private lateinit var storage: Storage
     private lateinit var mockHttpClient: HTTPClient
@@ -35,16 +37,16 @@ class EventPipelineRetryChainTest {
         MockKAnnotations.init(this)
         fakeTime = FakeTimeProvider(1000L)
 
-        mockHttpClient = spyk(HTTPClient("test-write-key", RequestFactory()))
+        mockHttpClient = spyk(HTTPClient(writeKey, RequestFactory()))
         analytics = mockAnalytics(testScope, testDispatcher)
-        clearPersistentStorage(analytics.configuration.writeKey)
+        every { analytics.configuration.writeKey } returns writeKey
         storage = spyk(ConcreteStorageProvider.createStorage(analytics))
         every { analytics.storage } returns storage
     }
 
     @AfterEach
     fun teardown() {
-        clearPersistentStorage("123")
+        clearPersistentStorage(writeKey)
     }
 
     private fun createTestEvent(name: String): ScreenEvent {
@@ -61,7 +63,7 @@ class EventPipelineRetryChainTest {
         return object : EventPipeline(
             analytics,
             "test-destination",
-            "test-write-key",
+            writeKey,
             listOf(CountBasedFlushPolicy(2)),
             httpConfig = httpConfig,
             timeProvider = fakeTime
@@ -132,62 +134,79 @@ class EventPipelineRetryChainTest {
         pipeline.stop()
     }
     @Test
-    fun `SIMPLE TEST - verify time advance allows third upload after rate limit expires`() {
-        val httpConfig = HttpConfig(
-            rateLimitConfig = RateLimitConfig(enabled = true),
-            backoffConfig = BackoffConfig(enabled = false)
-        )
-        val pipeline = createPipeline(httpConfig)
+    fun `Retry-After holds both batch files until the source cooldown expires`() {
+        val pipeline = createPipeline(HttpConfig(rateLimitConfig = RateLimitConfig(enabled = true)))
+        val rateLimited = HTTPException(429, "", "", mutableMapOf("retry-after" to mutableListOf("60")))
+        every { mockHttpClient.upload(any()) } throws rateLimited andThen mockk<Connection>(relaxed = true)
         pipeline.start()
+        try {
+            pipeline.put(createTestEvent("first"))
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            verify(exactly = 1) { mockHttpClient.upload(any()) }
 
-        var uploadAttempts = 0
-        var successfulUploads = 0
+            val deadline = fakeTime.currentTimeMillis() + 60_000
+            fakeTime.setTime(deadline - 1)
+            pipeline.put(createTestEvent("second"))
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            assertEquals(2, parseFilePaths(storage.read(Storage.Constants.Events)).size)
+            verify(exactly = 1) { mockHttpClient.upload(any()) }
 
-        every { mockHttpClient.upload(any()) } answers {
-            uploadAttempts++
-            if (uploadAttempts == 1) {
-                // First attempt: 429
-                throw HTTPException(429, "", "", mutableMapOf("retry-after" to mutableListOf("60")))
-            } else {
-                // Subsequent attempts: Success
-                successfulUploads++
-                mockk {
-                    every { connection } returns mockk(relaxed = true)
-                    every { outputStream } returns mockk(relaxed = true)
-                    every { close() } just Runs
-                }
-            }
+            fakeTime.setTime(deadline)
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            verify(exactly = 3) { mockHttpClient.upload(any()) }
+            assertTrue(parseFilePaths(storage.read(Storage.Constants.Events)).isEmpty())
+        } finally {
+            pipeline.stop()
         }
+    }
 
-        // First flush: 429 (creates batch file 1)
-        pipeline.put(createTestEvent("event1"))
-        pipeline.put(createTestEvent("event2"))
-        Thread.sleep(200)
-        assertEquals(1, uploadAttempts, "First flush should attempt upload once")
+    @Test
+    fun `healthy batch uploads while a repeatedly failing batch waits for its deferred retry`() {
+        val pipeline = createPipeline(HttpConfig(
+            backoffConfig = BackoffConfig(enabled = true, maxRetryCount = 1, maxBackoffInterval = 10)
+        ))
+        val unavailable = HTTPException(503, "", "", mutableMapOf())
+        val body = ByteArrayOutputStream()
+        val success = mockk<Connection>(relaxed = true) { every { outputStream } returns body }
+        every { mockHttpClient.upload(any()) } throws unavailable andThenThrows unavailable andThen success
+        pipeline.start()
+        try {
+            val failing = createTestEvent("first")
+            pipeline.put(failing)
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            val first = parseFilePaths(storage.read(Storage.Constants.Events)).single()
 
-        // Second flush during rate limit: No upload (creates batch file 2)
-        pipeline.put(createTestEvent("event3"))
-        pipeline.put(createTestEvent("event4"))
-        Thread.sleep(200)
-        assertEquals(1, uploadAttempts, "Second flush should not upload (rate limited)")
+            fakeTime.setTime(fakeTime.currentTimeMillis() + 10_000)
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            assertEquals(2, storage.loadRetryState().batchMetadata.getValue(first).failureCount)
 
-        // Advance time PAST rate limit (61 seconds)
-        fakeTime.setTime(1000L + 61000L)
+            // Present the waiting file first regardless of filesystem enumeration order.
+            every { storage.read(Storage.Constants.Events) } answers {
+                parseFilePaths(callOriginal()).sortedBy { it != first }.joinToString()
+            }
+            val healthy = createTestEvent("healthy")
+            pipeline.put(healthy)
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            verify(exactly = 3) { mockHttpClient.upload(any()) }
+            assertTrue(body.toString("UTF-8").contains(healthy.messageId))
+            body.reset()
+            assertEquals(listOf(first), parseFilePaths(storage.read(Storage.Constants.Events)))
 
-        // Third flush: Should upload BOTH queued batches (batch 1 retry + batch 2)
-        pipeline.put(createTestEvent("event5"))
-        pipeline.put(createTestEvent("event6"))
-        Thread.sleep(200)
-
-        // We expect: attempt 1 (429) + attempt 2 (batch 1 retry success) + attempt 3 (batch 2 success) + attempt 4 (batch 3 success)
-        assertTrue(uploadAttempts >= 2, "Should have attempted uploads after rate limit expired")
-        assertTrue(successfulUploads >= 1, "At least one upload should have succeeded")
-
-        // Verify pipeline returned to READY
-        val state = storage.loadRetryState()
-        assertEquals(PipelineState.READY, state.pipelineState)
-
-        pipeline.stop()
+            fakeTime.setTime(fakeTime.currentTimeMillis() + 10_000)
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            verify(exactly = 4) { mockHttpClient.upload(any()) }
+            assertTrue(body.toString("UTF-8").contains(failing.messageId))
+            assertTrue(parseFilePaths(storage.read(Storage.Constants.Events)).isEmpty())
+        } finally {
+            pipeline.stop()
+        }
     }
 
     @Test
