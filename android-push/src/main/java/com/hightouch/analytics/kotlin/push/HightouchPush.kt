@@ -16,6 +16,7 @@ import com.hightouch.analytics.kotlin.push.internal.PushPreferences
 import com.hightouch.analytics.kotlin.push.messages.HightouchMessages
 import com.hightouch.analytics.kotlin.android.Analytics as AndroidAnalytics
 import com.hightouch.analytics.kotlin.core.Analytics
+import com.hightouch.analytics.kotlin.core.DeviceDeletionRequest
 import com.hightouch.analytics.kotlin.core.InternalHightouchApi
 import com.hightouch.analytics.kotlin.core.emptyJsonObject
 import com.hightouch.analytics.kotlin.core.platform.EnrichmentClosure
@@ -295,7 +296,7 @@ object HightouchPush {
                 put("platform", "android")
             },
             enrichment = { event ->
-                event?.also { e -> capturedUserId?.let { e.userId = it } }
+                event?.also { e -> e.userId = capturedUserId.orEmpty() }
             },
         )
         if (analytics.enabled && analytics.dataCollectionEnabled) {
@@ -389,8 +390,60 @@ object HightouchPush {
                 },
             )
         }
+        clearLocalUser(analytics)
+    }
+
+    private fun clearLocalUser(analytics: Analytics) {
         _currentUserId = null
         analytics.reset()
+    }
+
+    /**
+     * Turn data collection off, ask Hightouch to delete this device's record, and log the user
+     * out locally. Use it when the user asks for their data to be removed; use
+     * [setDataCollectionEnabled] with `false` to only pause collection and keep the user.
+     *
+     * Fires `"CEP Push Token Events"` with `provider_event_type = "deleted"`, the one event sent
+     * while collection is off, then resets analytics state as [logout] does. Unlike [logout] it
+     * also runs when no user is identified. The request is sent once: calling this again sends
+     * nothing until [setDataCollectionEnabled] has turned collection back on.
+     *
+     * The device id and the stored FCM token are kept. To resume, call [setDataCollectionEnabled]
+     * with `true` and then [identify].
+     */
+    @JvmStatic
+    @Synchronized
+    fun wipeData() {
+        val analytics = analyticsOrError()
+        val prefs = _prefs ?: error("[HightouchPush] Call initialize() before wipeData().")
+        analytics.dataCollectionEnabled = false
+        // Capture identity before the reset below: it swaps in a new anonymousId immediately,
+        // while the event is attributed asynchronously.
+        val outgoingUserId = _currentUserId
+        val outgoingAnonymousId = analytics.anonymousId()
+        val token = prefs.token
+        // A disabled Analytics drops every event, so the flag stays unset and a later call retries.
+        if (!prefs.deletionSent && analytics.enabled) {
+            CepEventTracking.track(
+                name = CepEventTracking.PUSH_TOKEN_EVENTS,
+                properties = buildJsonObject {
+                    put(DeviceDeletionRequest.EVENT_TYPE_PROPERTY, CepEventTracking.TOKEN_DELETED)
+                    put("platform", "android")
+                    token?.let { put("token", it) }
+                    outgoingUserId?.let { put("userId", it) }
+                },
+                enrichment = { event ->
+                    event?.also {
+                        it.userId = outgoingUserId.orEmpty()
+                        it.anonymousId = outgoingAnonymousId
+                    }
+                },
+            )
+            prefs.deletionSent = true
+            analytics.flush()
+        }
+        clearLocalUser(analytics)
+        prefs.lastUploadedAtMillis = 0L
     }
 
     /**
@@ -414,7 +467,8 @@ object HightouchPush {
      *
      * Turning it on registers the FCM token again, for the current user if one is identified.
      *
-     * Turning it off does not remove the push registration Hightouch already holds for this device.
+     * Turning it off does not remove the push registration Hightouch already holds for this device;
+     * [wipeData] asks Hightouch to delete it.
      */
     @JvmStatic
     @Synchronized
@@ -423,6 +477,7 @@ object HightouchPush {
         val wasEnabled = analytics.dataCollectionEnabled
         analytics.dataCollectionEnabled = enabled
         if (!enabled || wasEnabled) return
+        _prefs?.deletionSent = false
         // Registrations, identifies and logouts made while off were dropped, so send the current
         // state rather than waiting for the heartbeat.
         _prefs?.token?.let { token ->

@@ -558,7 +558,8 @@ open class Analytics protected constructor(
 
     fun process(event: BaseEvent, enrichment: EnrichmentClosure? = null) {
         if (!enabled) return
-        if (!dataCollectionEnabled) return
+        // While data collection is off, only the request to delete this device's record passes.
+        if (!dataCollectionEnabled && !DeviceDeletionRequest.matches(event)) return
 
         event.applyBaseData(enrichment)
 

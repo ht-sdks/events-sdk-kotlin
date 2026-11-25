@@ -32,6 +32,17 @@ internal class PushPreferences(context: Context) {
             prefs.edit().putLong(KEY_LAST_UPLOADED_AT, value).apply()
         }
 
+    /**
+     * Whether the request to delete this device's record has been sent since data collection was
+     * last turned off. Keeps `HightouchPush.wipeData` from sending it again until collection is
+     * turned back on.
+     */
+    var deletionSent: Boolean
+        get() = prefs.getBoolean(KEY_DELETION_SENT, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_DELETION_SENT, value).apply()
+        }
+
     fun clear() {
         prefs.edit().clear().apply()
     }
@@ -40,5 +51,6 @@ internal class PushPreferences(context: Context) {
         const val FILE_NAME = "hightouch_push_prefs"
         const val KEY_FCM_TOKEN = "fcm_token"
         const val KEY_LAST_UPLOADED_AT = "last_uploaded_at_millis"
+        const val KEY_DELETION_SENT = "deletion_sent"
     }
 }

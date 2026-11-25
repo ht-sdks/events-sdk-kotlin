@@ -82,11 +82,18 @@ sealed class BaseEvent {
         internal const val ALL_INTEGRATIONS_KEY = "All"
     }
 
+    internal abstract val isTimestampInitialized: Boolean
+    internal abstract val isMessageIdInitialized: Boolean
+
     internal fun applyBaseData(enrichment: EnrichmentClosure?) {
         this.enrichment = enrichment
-        this.timestamp = SegmentInstant.now()
+        if (!isTimestampInitialized) {
+            this.timestamp = SegmentInstant.now()
+        }
         this.context = emptyJsonObject
-        this.messageId = UUID.randomUUID().toString()
+        if (!isMessageIdInitialized) {
+            this.messageId = UUID.randomUUID().toString()
+        }
     }
 
     internal suspend fun applyBaseEventData(store: Store) {
@@ -175,6 +182,8 @@ data class TrackEvent(
     override var _metadata: DestinationMetadata = DestinationMetadata()
 
     override lateinit var timestamp: String
+    override val isTimestampInitialized: Boolean get() = ::timestamp.isInitialized
+    override val isMessageIdInitialized: Boolean get() = ::messageId.isInitialized
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -211,6 +220,8 @@ data class IdentifyEvent(
     override lateinit var context: AnalyticsContext
 
     override lateinit var timestamp: String
+    override val isTimestampInitialized: Boolean get() = ::timestamp.isInitialized
+    override val isMessageIdInitialized: Boolean get() = ::messageId.isInitialized
     override var _metadata: DestinationMetadata = DestinationMetadata()
 
     override fun equals(other: Any?): Boolean {
@@ -247,6 +258,8 @@ data class GroupEvent(
     override var _metadata: DestinationMetadata = DestinationMetadata()
 
     override lateinit var timestamp: String
+    override val isTimestampInitialized: Boolean get() = ::timestamp.isInitialized
+    override val isMessageIdInitialized: Boolean get() = ::messageId.isInitialized
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -281,6 +294,8 @@ data class AliasEvent(
     override lateinit var context: AnalyticsContext
 
     override lateinit var timestamp: String
+    override val isTimestampInitialized: Boolean get() = ::timestamp.isInitialized
+    override val isMessageIdInitialized: Boolean get() = ::messageId.isInitialized
     override var _metadata: DestinationMetadata = DestinationMetadata()
 
     override fun equals(other: Any?): Boolean {
@@ -317,6 +332,8 @@ data class ScreenEvent(
     override var userId: String = ""
 
     override lateinit var timestamp: String
+    override val isTimestampInitialized: Boolean get() = ::timestamp.isInitialized
+    override val isMessageIdInitialized: Boolean get() = ::messageId.isInitialized
     override var _metadata: DestinationMetadata = DestinationMetadata()
 
     override fun equals(other: Any?): Boolean {

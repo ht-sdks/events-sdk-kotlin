@@ -188,6 +188,111 @@ class DataCollectionTests {
         assertEquals("user-2", analytics.userId())
     }
 
+    private fun Analytics.trackTokenEvent(type: String) {
+        track(
+            DeviceDeletionRequest.EVENT_NAME,
+            buildJsonObject { put(DeviceDeletionRequest.EVENT_TYPE_PROPERTY, type) },
+        )
+    }
+
+    private fun processedTokenEventTypes(): List<String?> =
+        processedEvents.filterIsInstance<TrackEvent>().map {
+            it.properties[DeviceDeletionRequest.EVENT_TYPE_PROPERTY]?.jsonPrimitive?.content
+        }
+
+    @Test
+    fun `a device deletion request is the only event delivered while collection is off`() {
+        val analytics = newAnalytics(dataCollectionEnabledByDefault = false)
+
+        analytics.trackTokenEvent("registered")
+        analytics.trackTokenEvent("disabled")
+        analytics.track("deleted")
+        analytics.trackTokenEvent(DeviceDeletionRequest.EVENT_TYPE)
+
+        assertEquals(listOf<String?>("deleted"), processedTokenEventTypes())
+        assertEquals(1, processedEvents.size)
+    }
+
+    @Test
+    fun `the kill switch still drops a device deletion request`() {
+        val analytics = newAnalytics()
+
+        analytics.enabled = false
+        analytics.trackTokenEvent(DeviceDeletionRequest.EVENT_TYPE)
+
+        assertTrue(processedEvents.isEmpty())
+    }
+
+    @Test
+    fun `a device deletion request held at startup is delivered with collection off`() =
+        runTest(testDispatcher) {
+            val analytics = newAnalytics(dataCollectionEnabledByDefault = false)
+            analytics.pauseEventProcessing()
+
+            analytics.trackTokenEvent(DeviceDeletionRequest.EVENT_TYPE)
+            analytics.resumeEventProcessing()
+
+            assertEquals(listOf<String?>("deleted"), processedTokenEventTypes())
+        }
+
+    @Test
+    fun `an event held at startup is dropped when collection goes off before startup finishes`() =
+        runTest(testDispatcher) {
+            val analytics = newAnalytics()
+            analytics.pauseEventProcessing()
+
+            analytics.track("held at startup")
+            analytics.dataCollectionEnabled = false
+            analytics.resumeEventProcessing()
+
+            assertTrue(processedEvents.isEmpty())
+        }
+
+    @Test
+    fun `startup replay preserves original timestamp and messageId`() =
+        runTest(testDispatcher) {
+            val analytics = newAnalytics(dataCollectionEnabledByDefault = false)
+            analytics.pauseEventProcessing()
+
+            val originalTimestamp = "2026-01-01T00:00:00.000Z"
+            val originalMessageId = "orig-msg-id"
+            val event = TrackEvent(
+                event = DeviceDeletionRequest.EVENT_NAME,
+                properties = buildJsonObject {
+                    put(DeviceDeletionRequest.EVENT_TYPE_PROPERTY, DeviceDeletionRequest.EVENT_TYPE)
+                },
+            ).apply {
+                timestamp = originalTimestamp
+                messageId = originalMessageId
+            }
+
+            analytics.process(event)
+            analytics.resumeEventProcessing()
+
+            val delivered = processedEvents.single()
+            assertEquals(originalTimestamp, delivered.timestamp)
+            assertEquals(originalMessageId, delivered.messageId)
+        }
+
+    @Test
+    fun `a deleted event left in tmp rolls over after restart while collection stays off`() =
+        runTest(testDispatcher) {
+            val first = newAnalytics(dataCollectionEnabledByDefault = false)
+            first.storage.write(
+                Storage.Constants.Events,
+                """{"type":"track","event":"${DeviceDeletionRequest.EVENT_NAME}","properties":{"${DeviceDeletionRequest.EVENT_TYPE_PROPERTY}":"${DeviceDeletionRequest.EVENT_TYPE}"}}""",
+            )
+            first.storage.close()
+
+            val restarted = newAnalytics(dataCollectionEnabledByDefault = false)
+            restarted.storage.rollover()
+
+            val uploads = restarted.pendingUploads()
+            assertEquals(1, uploads.size)
+            val contents = restarted.storage.readAsStream(uploads.single())!!.bufferedReader().use { it.readText() }
+            assertTrue(contents.contains(DeviceDeletionRequest.EVENT_TYPE))
+        }
+
     private companion object {
         const val WRITE_KEY = "data-collection-tests"
     }

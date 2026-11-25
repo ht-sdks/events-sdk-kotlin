@@ -100,6 +100,27 @@ HightouchPush.setDataCollectionEnabled(true)   // or false
 
 `HightouchPush.isDataCollectionEnabled` returns the current value.
 
+### Deleting the device's data
+
+```kotlin
+HightouchPush.wipeData()
+```
+
+`wipeData()` turns data collection off, asks Hightouch to delete the record it holds for this
+device, and logs the user out locally (the same local reset as `logout`).
+
+- Use `wipeData()` when the user asks for their data to be removed. Use
+  `setDataCollectionEnabled(false)` when you only want to pause collection: it keeps the user
+  and sends nothing.
+- To resume later, call `setDataCollectionEnabled(true)` and then `identify`.
+- The deletion request is sent once. Calling `wipeData()` again sends nothing until collection has
+  been turned back on.
+- The request is sent with the next upload. That can take up to about 30 seconds, or until the
+  next launch if the app is closed first.
+- It does not delete events already delivered to your warehouse.
+- It does not delete in-app messages cached on the device.
+- It does not change the device id.
+
 ## Notification permission (Android 13+)
 
 On Android 13 (API 33) and above, posting notifications requires the runtime
