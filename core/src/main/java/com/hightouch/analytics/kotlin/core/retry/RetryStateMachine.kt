@@ -62,13 +62,11 @@ class RetryStateMachine(
         currentTime: Long
     ): RetryState {
         val exhausted = state.globalRetryCount + 1 >= config.rateLimitConfig.maxRetryCount
-        val waitUntilTimeMs = if (exhausted) {
-            currentTime + maxOf(config.rateLimitConfig.maxRetryInterval, response.retryAfterSeconds ?: 0) * 1000L
-        } else calculateWaitUntilTimeMs(response.retryAfterSeconds, currentTime)
+        val retryAfter = if (exhausted) null else response.retryAfterSeconds
 
         return state.copy(
             pipelineState = PipelineState.RATE_LIMITED,
-            waitUntilTime = waitUntilTimeMs,
+            waitUntilTime = calculateWaitUntilTimeMs(retryAfter, currentTime),
             globalRetryCount = state.globalRetryCount + 1
         )
     }

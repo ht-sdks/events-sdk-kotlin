@@ -127,7 +127,12 @@ class RetryStateMachineTest {
         val newState = stateMachine.handleResponse(state, response)
 
         assertEquals(PipelineState.RATE_LIMITED, newState.pipelineState)
-        assertEquals(301000L, newState.waitUntilTime)  // 1000 + 300*1000 (clamped)
+        assertEquals(301000L, newState.waitUntilTime)
+        val lastAttempt = RetryState(globalRetryCount = config.rateLimitConfig.maxRetryCount - 1)
+        for (hint in listOf(3, 3600)) {
+            val exhausted = stateMachine.handleResponse(lastAttempt, response.copy(retryAfterSeconds = hint))
+            assertEquals(301000L, exhausted.waitUntilTime)
+        }
     }
 
     @Test
