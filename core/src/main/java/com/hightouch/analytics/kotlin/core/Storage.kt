@@ -34,7 +34,6 @@ interface Storage {
         Traits("hightouch.traits"),
         AnonymousId("hightouch.anonymousId"),
         Settings("hightouch.settings"),
-        StartupEvents("hightouch.startup.events"),
         Events("hightouch.events"),
         AppVersion("hightouch.app.version"),
         AppBuild("hightouch.app.build"),

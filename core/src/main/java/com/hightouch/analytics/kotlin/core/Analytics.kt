@@ -58,8 +58,6 @@ open class Analytics protected constructor(
             }
         }
 
-    internal val startupQueue = StartupQueue()
-
     internal var forceRunningJob: Job? = null
     internal val forceRunningMutex = Mutex()
 
@@ -112,10 +110,9 @@ open class Analytics protected constructor(
     // This function provides a default state to the store & attaches the storage and store instances
     // Initiates the initial call to settings and adds default system plugins
     internal fun build() {
-        // because startup queue doesn't depend on a state, we can add it first
-        add(startupQueue)
-        add(ContextPlugin())
         add(UserInfoPlugin())
+        add(StartupQueue())
+        add(ContextPlugin())
 
         Telemetry.increment(Telemetry.INVOKE_METRIC) {
             it["message"] = "configured"
@@ -495,19 +492,27 @@ open class Analytics protected constructor(
      * @see <a href="https://segment.com/docs/tracking-api/alias/">Alias Documentation</a>
      */
     fun alias(newId: String, enrichment: EnrichmentClosure? = null) {
-        val info = userInfo
-        val event = AliasEvent(userId = newId, previousId = info.userId ?: info.anonymousId)
         analyticsScope.launch(analyticsDispatcher) {
-            store.dispatch(UserInfo.SetUserIdAction(newId), UserInfo::class)
+            val curUserInfo = store.currentState(UserInfo::class)
+            if (curUserInfo != null) {
+                val event = AliasEvent(
+                    userId = newId,
+                    previousId = curUserInfo.userId ?: curUserInfo.anonymousId
+                )
+                launch {
+                    store.dispatch(UserInfo.SetUserIdAction(newId), UserInfo::class)
+                }
+                process(event, enrichment)
+            } else {
+                log("failed to fetch current UserInfo state")
+            }
         }
-        process(event, enrichment)
     }
 
     fun process(event: BaseEvent, enrichment: EnrichmentClosure? = null) {
         if (!enabled) return
 
         event.applyBaseData(enrichment)
-        if (startupQueue.capture(event)) return
 
         log("applying base attributes on ${Thread.currentThread().name}")
         analyticsScope.launch(analyticsDispatcher) {

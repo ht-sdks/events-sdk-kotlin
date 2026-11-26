@@ -14,7 +14,7 @@ class UserInfoPlugin : Plugin {
 
     override fun execute(event: BaseEvent): BaseEvent {
 
-        if (analytics.startupQueue.isReplaying(event)) return event
+        if (event.startupIdentityCaptured) return event
 
         if (event.type == EventType.Identify) {
 

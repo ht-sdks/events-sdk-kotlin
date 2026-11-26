@@ -32,16 +32,9 @@ class PropertiesFile(val file: File) : KVS {
         }
     }
 
-    @Synchronized fun save() {
-        val temporary = File.createTempFile("prefs-", ".tmp", file.absoluteFile.parentFile)
-        try {
-            FileOutputStream(temporary).use {
-                properties.store(it, null)
-                it.fd.sync()
-            }
-            check(temporary.renameTo(file)) { "Could not replace preferences" }
-        } finally {
-            temporary.delete()
+    fun save() {
+        FileOutputStream(file).use {
+            properties.store(it, null)
         }
     }
 

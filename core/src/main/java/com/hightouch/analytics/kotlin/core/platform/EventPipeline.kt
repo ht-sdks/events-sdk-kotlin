@@ -82,7 +82,6 @@ open class EventPipeline(
     }
 
     fun put(event: BaseEvent) {
-        if (logTag == "Segment.io") analytics.startupQueue.willWrite(event)
         writeChannel.trySend(event)
     }
 
@@ -145,7 +144,6 @@ open class EventPipeline(
                 val stringVal = stringifyBaseEvent(event)
                 analytics.log("$logTag running $stringVal")
                 storage.write(Storage.Constants.Events, stringVal)
-                if (logTag == "Segment.io") analytics.startupQueue.didWrite(event.messageId)
 
                 flushPolicies.forEach { flushPolicy -> flushPolicy.updateState(event) }
             }
