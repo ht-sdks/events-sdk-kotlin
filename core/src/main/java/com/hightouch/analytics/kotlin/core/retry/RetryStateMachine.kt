@@ -70,6 +70,9 @@ class RetryStateMachine(
         )
     }
 
+    internal fun rateLimitExhausted(state: RetryState): Boolean =
+        config.rateLimitConfig.enabled && state.globalRetryCount >= config.rateLimitConfig.maxRetryCount
+
     private fun calculateWaitUntilTimeMs(retryAfterSeconds: Int?, currentTime: Long): Long {
         val seconds = retryAfterSeconds?.coerceAtLeast(0) ?: config.rateLimitConfig.maxRetryInterval
         val clampedSeconds = minOf(seconds, config.rateLimitConfig.maxRetryInterval)
@@ -127,7 +130,7 @@ class RetryStateMachine(
         }
 
         // Clear stale rate limit state if it has expired
-        val clearedState = if (state.pipelineState == PipelineState.RATE_LIMITED &&
+        var clearedState = if (state.pipelineState == PipelineState.RATE_LIMITED &&
                                state.waitUntilTime != null &&
                                currentTime >= state.waitUntilTime) {
             state.copy(
@@ -138,14 +141,12 @@ class RetryStateMachine(
             state
         }
 
-        // Check 2: Global rate limit retry count
-        if (config.rateLimitConfig.enabled &&
-            clearedState.globalRetryCount >= config.rateLimitConfig.maxRetryCount) {
-            return UploadDecision.DropBatch(DropReason.MAX_RETRIES_EXCEEDED) to
-                   clearedState.copy(globalRetryCount = 0).removeBatch(batchFile)
+        // Older persisted state may have an exhausted count without the identity of the failed file.
+        if (clearedState.globalRetryCount > 0 && rateLimitExhausted(clearedState)) {
+            clearedState = clearedState.copy(globalRetryCount = 0)
         }
 
-        // Check 3: Per-batch metadata
+        // Check per-batch metadata
         val metadata = clearedState.batchMetadata[batchFile]
         if (metadata != null) {
             // Check retry count limit (must be checked before duration per spec)

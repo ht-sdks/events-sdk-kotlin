@@ -13,6 +13,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.ByteArrayOutputStream
 import java.util.*
 
 /**
@@ -68,6 +69,46 @@ class EventPipelineRetryChainTest {
         ) {
             override val httpClient: HTTPClient
                 get() = mockHttpClient
+        }
+    }
+
+    @Test
+    fun `429 exhaustion only drops the file that received the response`() {
+        val pipeline = createPipeline(HttpConfig(rateLimitConfig = RateLimitConfig(enabled = true, maxRetryCount = 1)))
+        val firstFile = slot<String>()
+        every { storage.readAsStream(capture(firstFile)) } answers { callOriginal() }
+        val body = ByteArrayOutputStream()
+        val success = mockk<Connection>(relaxed = true) { every { outputStream } returns body }
+        val rateLimited = HTTPException(429, "", "", mutableMapOf("retry-after" to mutableListOf("60")))
+        every { mockHttpClient.upload(any()) } throws rateLimited andThen success
+
+        pipeline.start()
+        try {
+            val a = createTestEvent("A").apply { messageId = "event-a" }
+            pipeline.put(a)
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            val exhaustedFile = firstFile.captured
+
+            // File storage does not guarantee iteration order across flushes.
+            every { storage.read(Storage.Constants.Events) } answers {
+                parseFilePaths(callOriginal()).sortedBy { it == exhaustedFile }.joinToString(",")
+            }
+            val b = createTestEvent("B").apply { messageId = "event-b" }
+            pipeline.put(b)
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            verify(exactly = 1) { mockHttpClient.upload(any()) }
+
+            fakeTime.setTime(fakeTime.currentTimeMillis() + 60_000)
+            pipeline.flush()
+            testScope.testScheduler.runCurrent()
+            assertTrue(body.toString().contains(b.messageId))
+            assertFalse(body.toString().contains(a.messageId))
+            verify(exactly = 2) { mockHttpClient.upload(any()) }
+            assertTrue(parseFilePaths(storage.read(Storage.Constants.Events)).isEmpty())
+        } finally {
+            pipeline.stop()
         }
     }
 
