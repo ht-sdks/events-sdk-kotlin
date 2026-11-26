@@ -93,6 +93,7 @@ private fun AppRoot() {
                 HightouchPush.logout()
                 screen = Screen.Login
             },
+            onDataWiped = { screen = Screen.Login },
             onOpenSilentPushLog = { screen = Screen.SilentPushLog },
         )
         Screen.SilentPushLog -> SilentPushLogScreen(

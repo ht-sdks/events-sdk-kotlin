@@ -103,7 +103,7 @@ private fun EntryCard(entry: SilentPushStore.Entry) {
                     .format(Date(entry.receivedAtMillis)),
                 style = MaterialTheme.typography.caption,
             )
-            entry.customData.forEach { (key, value) ->
+            for ((key, value) in entry.customData) {
                 Text(
                     text = "$key = $value",
                     style = MaterialTheme.typography.body2,

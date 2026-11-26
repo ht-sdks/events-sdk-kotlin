@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
+import androidx.compose.material.Divider
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.OutlinedTextField
@@ -46,8 +49,9 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("Enter a userId to identify the current user. The SDK will fire a fresh \"Push Token Registered\" event after identify so the token can be associated with the user.")
@@ -63,6 +67,9 @@ fun LoginScreen(
                 enabled = userId.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Log in") }
+
+            Divider()
+            StatusPanel()
         }
     }
 }
