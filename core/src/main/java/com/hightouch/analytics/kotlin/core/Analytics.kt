@@ -110,10 +110,9 @@ open class Analytics protected constructor(
     // This function provides a default state to the store & attaches the storage and store instances
     // Initiates the initial call to settings and adds default system plugins
     internal fun build() {
-        // because startup queue doesn't depend on a state, we can add it first
+        add(UserInfoPlugin())
         add(StartupQueue())
         add(ContextPlugin())
-        add(UserInfoPlugin())
 
         Telemetry.increment(Telemetry.INVOKE_METRIC) {
             it["message"] = "configured"

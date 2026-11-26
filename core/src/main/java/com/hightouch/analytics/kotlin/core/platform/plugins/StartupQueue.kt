@@ -7,9 +7,7 @@ import com.hightouch.analytics.kotlin.core.platform.Plugin
 import kotlinx.coroutines.launch
 import com.hightouch.analytics.kotlin.core.platform.plugins.logger.*
 import sovran.kotlin.Subscriber
-import java.util.Queue
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.ArrayDeque
 
 /**
  * Analytics plugin to manage started state of analytics client
@@ -21,8 +19,8 @@ class StartupQueue : Plugin, Subscriber {
     override lateinit var analytics: Analytics
 
     private val maxSize = 1000
-    private val started: AtomicBoolean = AtomicBoolean(false)
-    private val queuedEvents: Queue<BaseEvent> = ConcurrentLinkedQueue()
+    private var started = false
+    private val queuedEvents = ArrayDeque<BaseEvent>()
 
     override fun setup(analytics: Analytics) {
         super.setup(analytics)
@@ -39,42 +37,22 @@ class StartupQueue : Plugin, Subscriber {
         }
     }
 
-    override fun execute(event: BaseEvent): BaseEvent? {
-        if (!started.get()) {
-            analytics.log("SegmentStartupQueue queueing event")
-            // timeline hasn't started, so queue it up.
-            if (queuedEvents.size >= maxSize) {
-                // if we've exceeded the max queue size start dropping events
-                queuedEvents.remove()
-            }
-            queuedEvents.offer(event)
-            return null
-        }
-        // the timeline has started, so let the event pass.
-        return event
+    override fun execute(event: BaseEvent): BaseEvent? = synchronized(queuedEvents) {
+        if (started) return event
+        if (queuedEvents.size >= maxSize) queuedEvents.removeFirst()
+        event.startupIdentityCaptured = true
+        queuedEvents.addLast(event)
+        null
     }
 
-    // Handler to manage system update
     private fun runningUpdate(state: System) {
-        analytics.log("Analytics starting = ${state.running}")
-        started.set(state.running)
-        if (started.get()) {
-            replayEvents()
+        val pending = synchronized(queuedEvents) {
+            started = state.running
+            if (!started || queuedEvents.isEmpty()) return
+            queuedEvents.toList().also { queuedEvents.clear() }
         }
-    }
-
-    private fun replayEvents() {
-        // replay the queued events to the instance of Analytics we're working with.
-        while (!queuedEvents.isEmpty()) {
-
-            val event = queuedEvents.poll()
-
-            // It is possible that event might actually be null due to time-slicing
-            // after checking if the queue is empty so we only process if the event
-            // if it is indeed not NULL.
-            event?.let {
-                analytics.process(it, it.enrichment)
-            }
+        for (event in pending) {
+            if (analytics.enabled) analytics.timeline.process(event)
         }
     }
 }

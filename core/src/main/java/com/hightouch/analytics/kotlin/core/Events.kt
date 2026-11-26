@@ -76,6 +76,9 @@ sealed class BaseEvent {
 
     abstract var _metadata: DestinationMetadata
 
+    @kotlinx.serialization.Transient
+    internal var startupIdentityCaptured = false
+
     var enrichment: EnrichmentClosure? = null
 
     companion object {
@@ -123,6 +126,7 @@ sealed class BaseEvent {
             integrations = original.integrations
             userId = original.userId
             _metadata = original._metadata
+            startupIdentityCaptured = original.startupIdentityCaptured
             enrichment = original.enrichment
         }
         @Suppress("UNCHECKED_CAST")

@@ -14,6 +14,8 @@ class UserInfoPlugin : Plugin {
 
     override fun execute(event: BaseEvent): BaseEvent {
 
+        if (event.startupIdentityCaptured) return event
+
         if (event.type == EventType.Identify) {
 
             analytics.userInfo.userId = event.userId

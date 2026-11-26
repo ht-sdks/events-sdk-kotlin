@@ -4,6 +4,9 @@ import com.hightouch.analytics.kotlin.core.Analytics
 import com.hightouch.analytics.kotlin.core.Configuration
 import com.hightouch.analytics.kotlin.core.TrackEvent
 import com.hightouch.analytics.kotlin.core.utils.testAnalytics
+import com.hightouch.analytics.kotlin.core.BaseEvent
+import com.hightouch.analytics.kotlin.core.System
+import kotlinx.coroutines.runBlocking
 import io.mockk.every
 import io.mockk.spyk
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -31,6 +34,25 @@ internal class StartupQueueTest {
             autoAddSegmentDestination = false
         )
         analytics = testAnalytics(config, testScope, testDispatcher)
+    }
+
+    @Test
+    fun `startup replay keeps the captured event across reset`() = runBlocking {
+        analytics.store.dispatch(System.ToggleRunningAction(false), System::class)
+        val delivered = mutableListOf<BaseEvent>()
+        val event = TrackEvent(event = "early", properties = buildJsonObject {})
+        analytics.process(event) { it?.also(delivered::add) }
+        val originalId = event.messageId
+        val originalTime = event.timestamp
+        val originalAnonymousId = event.anonymousId
+        assertTrue(delivered.isEmpty())
+
+        analytics.reset()
+        analytics.store.dispatch(System.ToggleRunningAction(true), System::class)
+        val replay = delivered.single()
+        assertEquals(originalId, replay.messageId)
+        assertEquals(originalTime, replay.timestamp)
+        assertEquals(originalAnonymousId, replay.anonymousId)
     }
 
     @Test
