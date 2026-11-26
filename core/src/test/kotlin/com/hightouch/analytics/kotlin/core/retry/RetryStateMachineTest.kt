@@ -202,6 +202,14 @@ class RetryStateMachineTest {
     }
 
     @Test
+    fun `an exhausted count from older storage cannot be attributed to the next file`() {
+        val saved = RetryState(globalRetryCount = config.rateLimitConfig.maxRetryCount)
+        val (decision, state) = stateMachine.shouldUploadBatch(saved, "new-file")
+        assertEquals(UploadDecision.Proceed, decision)
+        assertEquals(0, stateMachine.getRetryCount(state, "new-file"))
+    }
+
+    @Test
     fun `shouldUploadBatch drops batch after max retries`() {
         val state = RetryState(
             batchMetadata = mapOf(

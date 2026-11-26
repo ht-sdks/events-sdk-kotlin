@@ -268,6 +268,11 @@ open class EventPipeline(
                     currentTime = timeProvider.currentTimeMillis()
                 )
                 retryState = retryStateMachine.handleResponse(retryState, responseInfo)
+                if (statusCode == 429 && retryStateMachine.rateLimitExhausted(retryState)) {
+                    analytics.reportInternalError(Exception("Batch dropped: ${DropReason.MAX_RETRIES_EXCEEDED}"))
+                    retryState = retryState.copy(globalRetryCount = 0, batchMetadata = retryState.batchMetadata - url)
+                    shouldCleanup = true
+                }
                 
                 // Persist updated retry state
                 withContext(fileIODispatcher) {
